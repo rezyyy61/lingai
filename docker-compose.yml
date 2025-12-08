@@ -1,0 +1,107 @@
+services:
+  app:
+    user: "${UID}:${GID}"
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: zeel_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+      - redis
+    networks:
+      - zeel_network
+
+  web:
+    image: nginx:alpine
+    container_name: zeel_web
+    restart: unless-stopped
+    ports:
+      - "8092:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/frontend-zeel.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - zeel_network
+
+  db:
+    image: mysql:8.0
+    container_name: zeel_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: zeel_db
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: zeel
+      MYSQL_PASSWORD: zeel
+    ports:
+      - "3402:3306"
+    volumes:
+      - zeel_db_data:/var/lib/mysql
+    networks:
+      - zeel_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: zeel_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6372:6379"
+    networks:
+      - zeel_network
+
+  queue:
+    user: "${UID}:${GID}"
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: zeel_queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work --verbose --tries=3 --timeout=90
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+      - redis
+    networks:
+      - zeel_network
+
+  scheduler:
+    user: "${UID}:${GID}"
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: zeel_scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan schedule:work
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+      - redis
+    networks:
+      - zeel_network
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: zeel_mailpit
+    restart: unless-stopped
+    ports:
+      - "8026:8025" # UI
+      # - "1027:1025"
+    networks:
+      - zeel_network
+
+networks:
+  zeel_network:
+    driver: bridge
+
+volumes:
+  zeel_db_data:
