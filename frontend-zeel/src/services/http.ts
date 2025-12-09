@@ -1,10 +1,11 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:8092/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 const TOKEN_STORAGE_KEY = 'zeel_token'
 
 export const http = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     Accept: 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
@@ -12,17 +13,12 @@ export const http = axios.create({
 })
 
 export const getStoredToken = () => {
-  if (typeof window === 'undefined') {
-    return ''
-  }
-
+  if (typeof window === 'undefined') return ''
   return localStorage.getItem(TOKEN_STORAGE_KEY) ?? ''
 }
 
 export const setStoredToken = (token: string | null) => {
-  if (typeof window === 'undefined') {
-    return
-  }
+  if (typeof window === 'undefined') return
 
   if (token) {
     localStorage.setItem(TOKEN_STORAGE_KEY, token)
