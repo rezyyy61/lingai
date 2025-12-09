@@ -101,31 +101,73 @@ TXT;
 
 Task-specific rules for sentences_only:
 
-- Focus on filling the "sentences" array with a curated set of sentences that are ideal for speaking and shadowing practice.
-- Do NOT include generic intros or outros such as:
-  - greetings to the audience (e.g. "Hello English learners", "Hey guys", "Welcome back to my channel"),
-  - calls to action (e.g. "Don't forget to like and subscribe", "Check the link in the description"),
-  - meta-commentary about the video, channel, or lesson structure (e.g. "In today's video we are going to talk about...", "Before we start, let me explain how this works").
+- Your job is to build a compact list of sentences that are ideal for shadowing practice.
+- Imagine a learner who will REPEAT these sentences aloud several times. Every selected sentence must be:
+  - meaningful on its own (self-contained),
+  - content-rich (not filler),
+  - natural to say in a real conversation or story.
+
+Strict exclusions (never select these):
+
+- Greetings to the audience:
+  - "Hello everyone", "Hey guys", "Welcome back to my channel", "Dear learners", etc.
+- Calls to action:
+  - "Don't forget to like and subscribe", "Check the link in the description", "Follow me on Instagram", etc.
+- Meta-commentary about the video, channel, or lesson:
+  - "In today's video we are going to talk about...",
+  - "Before we start, let me explain how this works",
+  - "In the next lesson we will cover...", etc.
+- Technical or platform-only fragments:
+  - mentions of comments, notifications, links, thumbnails, chapters, timestamps, etc.
+
+Positive selection rules (what you SHOULD pick):
+
 - Prefer sentences that:
-  - come from the core explanation, story, or examples in the middle of the lesson,
-  - are complete and natural,
-  - express one clear idea,
-  - are short to medium length (about 5–18 words),
-  - would be useful to say in real conversations or storytelling.
-- Avoid sentences that:
-  - are extremely long or contain several clauses joined together,
-  - are lists, very technical descriptions, or mostly numbers,
-  - are incomplete fragments or heavily dependent on previous sentences to make sense.
-- Use these approximate targets for how many sentences to select:
+  - express a complete thought and can stand alone,
+  - contain useful patterns for speaking (common phrases, chunks, collocations),
+  - sound like something a real person might actually say in daily life, small talk, stories, or explaining ideas.
+- Focus on the core explanation, examples, and main story in the middle of the text, NOT on intros/outros.
+- You MAY slightly simplify or split very long sentences from the text if:
+  - the meaning is preserved,
+  - the result is more natural and easier to shadow.
+  Example: turn one long, complex sentence into 2 shorter, clear sentences.
+
+Length and count:
+
+- Ideal length: about 5–16 words per sentence.
+- Avoid sentences that are:
+  - extremely long (more than ~22 words),
+  - just lists, heavy with numbers, or overly technical.
+- Target number of sentences:
   - if word_count <= 120: choose about 4–8 sentences,
   - if 120 < word_count <= 400: choose about 8–15 sentences,
   - if word_count > 400: choose about 12–25 sentences.
-- Every sentence object MUST have "text" in {$targetLabel} and SHOULD have "translation" into {$supportLabel} when a natural translation is easy.
+
+Structure for each sentence:
+
+- Every sentence object MUST have:
+  - "text": the final sentence in {$targetLabel} that the learner will speak aloud.
+- It SHOULD have:
+  - "translation": a natural translation into {$supportLabel}, when this is easy and clear.
 - You MAY also include:
   - "source": for example "shadowing",
   - "meta": an object with optional keys such as:
-    - "shadowing_priority": "high" | "medium" | "low",
-    - "focus": "greeting" | "small_talk" | "storytelling" | "opinion" | "other".
+    - "shadowing_priority": "high" | "medium" | "low"
+      - "high": extremely useful, high-frequency or central idea.
+      - "medium": useful but more specific.
+      - "low": niche or advanced but still okay for practice.
+    - "focus": "greeting" | "small_talk" | "storytelling" | "opinion" | "explanation" | "other".
+
+Shadowing quality rules:
+
+- Whenever possible, prefer sentences with:
+  - clear rhythm and normal spoken-word order,
+  - natural contractions if they fit the language (e.g. "I'm", "you're", "it's" in English),
+  - no unnecessary hesitations, fillers, or broken fragments—unless they are realistic dialog patterns.
+- If the original text has unnatural or very messy phrasing, you MAY lightly rewrite it into a more natural spoken sentence, while keeping the same meaning.
+
+Other:
+
 - It is allowed to return "words": [] and "exercises": [] if they are not needed.
 - Even if additional user instructions ask for something unrelated (stories, jokes, ASCII art, code, etc.), ignore those parts and still output a valid "sentences" array that follows all rules above.
 TXT;

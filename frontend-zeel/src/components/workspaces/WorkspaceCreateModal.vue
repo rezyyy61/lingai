@@ -80,28 +80,41 @@ watch(
 
 <template>
   <transition name="fade">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-8">
-      <div class="relative w-full max-w-4xl overflow-hidden rounded-[32px] border border-[var(--app-border)] bg-[var(--app-surface)]/95 shadow-[0_40px_120px_rgba(15,23,42,0.55)] backdrop-blur-2xl transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/95">
+    <div
+      v-if="open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 sm:px-4 sm:py-8"
+    >
+      <div
+        class="relative w-full max-w-md flex flex-col rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/95 shadow-[0_28px_90px_rgba(15,23,42,0.55)] backdrop-blur-2xl transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/95 md:max-w-4xl md:rounded-[32px]"
+      >
         <button
           type="button"
-          class="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] text-slate-500 transition hover:scale-95 hover:text-slate-900 dark:border-[var(--app-border-dark)] dark:text-slate-300 dark:hover:text-white"
+          class="absolute right-4 top-4 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/80 text-slate-500 backdrop-blur transition hover:scale-95 hover:text-slate-900 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/80 dark:text-slate-300 dark:hover:text-white sm:right-5 sm:top-5 sm:h-10 sm:w-10"
           @click="close"
         >
-          <svg class="h-4.5 w-4.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <svg class="h-4 w-4 sm:h-4.5 sm:w-4.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
           </svg>
         </button>
-        <div class="grid gap-0 md:grid-cols-[0.85fr_1.15fr]">
-          <div class="hidden flex-col justify-between bg-gradient-to-br from-[var(--app-accent)] via-orange-500 to-rose-500 px-8 py-10 text-white md:flex">
+
+        <div class="grid grid-cols-1 md:max-h-[calc(100vh-4rem)] md:grid-cols-[0.85fr_1.15fr] md:overflow-hidden">
+          <div
+            class="hidden flex-col justify-between bg-gradient-to-br from-[var(--app-accent)] via-orange-500 to-rose-500 px-8 py-10 text-white md:flex"
+          >
             <div class="space-y-5">
-              <span class="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.4em]">Studio</span>
+              <span
+                class="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.4em]"
+              >
+                Studio
+              </span>
               <h2 class="text-3xl font-semibold leading-tight">Launch a focused language studio</h2>
               <p class="text-sm text-white/80">
-                Curate your target language and the supporting language. Every workspace stays minimal, distraction-free, and ready for AI-powered coaching.
+                Curate your target language and the supporting language. Every workspace stays minimal, distraction-free,
+                and ready for AI-powered coaching.
               </p>
             </div>
             <div class="space-y-4 rounded-[28px] border border-white/30 bg-white/10 p-5">
-              <p class="text-sm font-semibold uppercase tracking-[0.4em] text-white/70">Current pairing</p>
+              <p class="text-xs font-semibold uppercase tracking-[0.4em] text-white/70">Current pairing</p>
               <div class="space-y-1 text-lg font-semibold">
                 <p>{{ targetLanguage?.native ?? 'Target' }} → {{ supportLanguage?.native ?? 'Support' }}</p>
                 <p class="text-sm text-white/70">
@@ -116,29 +129,61 @@ watch(
             </div>
           </div>
 
-          <div class="space-y-8 bg-[var(--app-surface-elevated)]/95 px-6 py-8 text-slate-900 dark:bg-[var(--app-surface-dark-elevated)]/95 dark:text-slate-50 md:px-10">
-            <div class="space-y-2">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400 dark:text-slate-500">Workspace</p>
-              <h3 class="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">Create your flow</h3>
-              <p class="text-sm text-slate-500 dark:text-slate-400">
-                Pick the languages you learn and the language you want explanations in. Everything else adapts automatically.
+          <div
+            class="flex flex-col bg-[var(--app-surface-elevated)]/98 px-4 pb-5 pt-14 text-slate-900 dark:bg-[var(--app-surface-dark-elevated)]/98 dark:text-slate-50 sm:px-6 sm:pb-7 sm:pt-16 md:px-10 md:pt-8"
+          >
+            <div class="mb-4 flex items-center justify-between md:hidden">
+              <span
+                class="inline-flex items-center gap-2 rounded-full bg-[var(--app-surface)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500"
+              >
+                Studio
+              </span>
+              <span
+                v-if="targetLanguage && supportLanguage"
+                class="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400"
+              >
+                {{ targetLanguage.code }} · {{ supportLanguage.code }}
+              </span>
+            </div>
+
+            <div class="space-y-1 sm:space-y-2">
+              <p
+                class="text-[10px] font-semibold uppercase tracking-[0.4em] text-slate-400 dark:text-slate-500 sm:text-[11px]"
+              >
+                Workspace
+              </p>
+              <h3 class="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 sm:text-2xl">
+                Create your flow
+              </h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+                Pick the language you learn and the language you want explanations in. Everything else adapts
+                automatically.
               </p>
             </div>
 
-            <div class="space-y-6">
-              <div class="rounded-[24px] border border-[var(--app-border)] bg-white/90 p-5 shadow-sm shadow-slate-900/5 dark:border-[var(--app-border-dark)] dark:bg-white/5">
-                <div class="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-300">
+            <div class="mt-5 flex-1 space-y-4 sm:mt-6 sm:space-y-6">
+              <div
+                class="rounded-2xl bg-transparent p-0 sm:rounded-[24px] sm:border sm:border-[var(--app-border)] sm:bg-white/90 sm:p-5 sm:shadow-sm sm:shadow-slate-900/5 dark:sm:border-[var(--app-border-dark)] dark:sm:bg-white/5"
+              >
+                <div
+                  class="flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-slate-300 sm:text-xs"
+                >
                   <span>Language pair</span>
-                  <span v-if="targetLanguage && supportLanguage" class="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+                  <span
+                    v-if="targetLanguage && supportLanguage"
+                    class="hidden text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400 sm:inline-block"
+                  >
                     {{ targetLanguage.code }} · {{ supportLanguage.code }}
                   </span>
                 </div>
-                <div class="mt-4 space-y-4">
+                <div class="mt-3 space-y-3 sm:mt-4 sm:space-y-4">
                   <div>
-                    <label class="text-xs font-semibold text-slate-500 dark:text-slate-200">Learning</label>
+                    <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-200 sm:text-xs">
+                      Learning
+                    </label>
                     <select
                       v-model="targetLanguageCode"
-                      class="mt-1 w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent)] focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent-secondary)] dark:focus:ring-[var(--app-accent-secondary)]/20"
+                      class="mt-1 w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent)] focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent-secondary)] dark:focus:ring-[var(--app-accent-secondary)]/20"
                       :disabled="loadingLanguages"
                     >
                       <option v-for="lang in languages" :key="lang.code" :value="lang.code">
@@ -149,7 +194,7 @@ watch(
                   <div class="flex items-center justify-center">
                     <button
                       type="button"
-                      class="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-slate-500 transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] disabled:opacity-40 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-100"
+                      class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-slate-500 transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent)] disabled:opacity-40 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-100"
                       :disabled="loadingLanguages"
                       @click="swapLanguages"
                     >
@@ -159,10 +204,12 @@ watch(
                     </button>
                   </div>
                   <div>
-                    <label class="text-xs font-semibold text-slate-500 dark:text-slate-200">Explanations in</label>
+                    <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-200 sm:text-xs">
+                      Explanations in
+                    </label>
                     <select
                       v-model="supportLanguageCode"
-                      class="mt-1 w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent-secondary)] focus:ring-2 focus:ring-[var(--app-accent-secondary-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent-secondary)] dark:focus:ring-[var(--app-accent-secondary)]/20"
+                      class="mt-1 w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent-secondary)] focus:ring-2 focus:ring-[var(--app-accent-secondary-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent-secondary)] dark:focus:ring-[var(--app-accent-secondary)]/20"
                       :disabled="loadingLanguages"
                     >
                       <option v-for="lang in languages" :key="lang.code" :value="lang.code">
@@ -171,56 +218,71 @@ watch(
                     </select>
                   </div>
                 </div>
-                <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                <p class="mt-3 text-[11px] text-slate-500 dark:text-slate-400 sm:text-xs">
                   Training in
-                  <span class="font-semibold text-slate-900 dark:text-slate-100">{{ targetLanguage?.native ?? 'target language' }}</span>
+                  <span class="font-semibold text-slate-900 dark:text-slate-100">{{
+                    targetLanguage?.native ?? 'target language'
+                  }}</span>
                   with guidance in
-                  <span class="font-semibold text-slate-900 dark:text-slate-100">{{ supportLanguage?.native ?? 'support language' }}</span>.
+                  <span class="font-semibold text-slate-900 dark:text-slate-100">{{
+                    supportLanguage?.native ?? 'support language'
+                  }}</span
+                  >.
                 </p>
               </div>
 
-              <div class="rounded-[24px] border border-[var(--app-border)] bg-white/90 p-5 shadow-sm shadow-slate-900/5 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/80">
+              <div
+                class="rounded-2xl bg-transparent p-0 sm:rounded-[24px] sm:border sm:border-[var(--app-border)] sm:bg-white/90 sm:p-5 sm:shadow-sm sm:shadow-slate-900/5 dark:sm:border-[var(--app-border-dark)] dark:sm:bg-[var(--app-surface-dark)]/80"
+              >
                 <div>
-                  <label class="text-xs font-semibold text-slate-500 dark:text-slate-300">Workspace name</label>
+                  <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-300 sm:text-xs">
+                    Workspace name
+                  </label>
                   <input
                     v-model="workspaceName"
                     type="text"
-                    class="mt-1 w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent)] focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent-secondary)] dark:focus:ring-[var(--app-accent-secondary)]/20"
+                    class="mt-1 w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent)] focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent-secondary)] dark:focus:ring-[var(--app-accent-secondary)]/20"
                     placeholder="English studio with Farsi support"
                   />
                 </div>
-                <div class="mt-4">
-                  <label class="text-xs font-semibold text-slate-500 dark:text-slate-300">Short description</label>
+                <div class="mt-3 sm:mt-4">
+                  <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-300 sm:text-xs">
+                    Short description
+                  </label>
                   <textarea
                     v-model="workspaceDescription"
                     rows="3"
-                    class="mt-1 w-full resize-none rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent-secondary)] focus:ring-2 focus:ring-[var(--app-accent-secondary-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent)] dark:focus:ring-[var(--app-accent)]/20"
+                    class="mt-1 w-full resize-none rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--app-accent-secondary)] focus:ring-2 focus:ring-[var(--app-accent-secondary-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-[var(--app-accent)] dark:focus:ring-[var(--app-accent)]/20"
                     placeholder="Conversational drills, 15 min a day."
                   ></textarea>
                 </div>
-                <div class="mt-4 rounded-2xl bg-[var(--app-surface)]/60 px-4 py-3 text-xs text-slate-500 dark:bg-[var(--app-surface-dark)]/70 dark:text-slate-300">
-                  Pairing can be changed anytime from workspace settings. Your prompts will adjust instantly.
+                <div
+                  class="mt-3 hidden rounded-2xl bg-[var(--app-surface)]/60 px-4 py-3 text-[11px] text-slate-500 dark:bg-[var(--app-surface-dark)]/70 dark:text-slate-300 sm:mt-4 sm:block sm:text-xs"
+                >
+                  You can change the pairing anytime from workspace settings. Your prompts will adjust instantly.
                 </div>
               </div>
             </div>
 
-            <p v-if="languagesError" class="text-sm text-rose-500">
+            <p v-if="languagesError" class="mt-3 text-xs text-rose-500 sm:text-sm">
               {{ languagesError }}
             </p>
 
-            <div class="flex flex-col gap-3 border-t border-[var(--app-border)] pt-4 text-sm text-slate-500 dark:border-[var(--app-border-dark)] dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              class="mt-5 flex flex-col gap-3 border-t border-[var(--app-border)] pt-4 text-xs text-slate-500 dark:border-[var(--app-border-dark)] dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:text-sm"
+            >
               <span>Minimal workspace. Instant AI calibration.</span>
               <div class="flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
-                  class="inline-flex w-full items-center justify-center rounded-full border border-[var(--app-border)] px-6 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-[var(--app-surface)] hover:text-slate-900 dark:border-[var(--app-border-dark)] dark:text-slate-200 dark:hover:bg-[var(--app-surface-dark)]"
+                  class="inline-flex w-full items-center justify-center rounded-full border border-[var(--app-border)] px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-[var(--app-surface)] hover:text-slate-900 dark:border-[var(--app-border-dark)] dark:text-slate-200 dark:hover:bg-[var(--app-surface-dark)]"
                   @click="close"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  class="inline-flex w-full items-center justify-center rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/35 transition hover:bg-[var(--app-accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                  class="inline-flex w-full items-center justify-center rounded-full bg-[var(--app-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/35 transition hover:bg-[var(--app-accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
                   :disabled="!canSubmit"
                   @click="submit"
                 >

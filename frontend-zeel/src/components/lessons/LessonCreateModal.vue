@@ -171,9 +171,12 @@ const handleAudioSubmit = async () => {
 
 <template>
   <transition name="fade">
-  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)] px-4 backdrop-blur-sm">
+    <div
+      v-if="open"
+      class="fixed inset-0 z-50 flex items-end justify-center bg-[var(--app-overlay)] px-0 py-0 backdrop-blur-sm sm:items-center sm:px-4 sm:py-6"
+    >
       <div
-        class="w-full max-w-2xl rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-6 shadow-xl dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
+        class="w-full max-w-md sm:max-w-2xl flex max-h-[100vh] flex-col rounded-t-3xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 pb-5 pt-4 shadow-[0_28px_90px_rgba(15,23,42,0.55)] sm:rounded-3xl sm:px-6 sm:pb-6 sm:pt-6 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
       >
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -203,7 +206,7 @@ const handleAudioSubmit = async () => {
           </button>
         </div>
 
-        <div class="mt-5 space-y-4">
+        <div class="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
           <div
             class="flex rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-1 text-[11px] font-semibold uppercase tracking-[0.16em] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
           >
