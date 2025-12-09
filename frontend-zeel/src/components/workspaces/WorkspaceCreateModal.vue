@@ -70,6 +70,7 @@ watch(
   (isOpen) => {
     if (isOpen && languages.value.length && !targetLanguageCode.value && !supportLanguageCode.value) {
       const fallback = languages.value.find((l) => l.code === 'en') ?? languages.value[0]
+      if (!fallback) return
       targetLanguageCode.value = fallback.code
       supportLanguageCode.value = fallback.code
     }

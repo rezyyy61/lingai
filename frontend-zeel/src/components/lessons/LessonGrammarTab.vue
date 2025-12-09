@@ -96,7 +96,7 @@ const parsedExamples = computed<UiExample[]>(() => {
 })
 
 const keyExample = computed<UiExample | null>(() => {
-  return parsedExamples.value.length ? parsedExamples.value[0] : null
+  return parsedExamples.value[0] ?? null
 })
 
 // -------- pattern lines --------
