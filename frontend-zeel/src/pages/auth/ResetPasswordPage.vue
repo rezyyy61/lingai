@@ -60,8 +60,10 @@ onBeforeUnmount(() => auth.resetErrors())
 <template>
   <div class="space-y-6">
     <div>
-      <h2 class="text-2xl font-semibold text-white">Reset your password</h2>
-      <p class="text-sm text-white/60">Choose a strong password to secure your workspace.</p>
+      <h2 class="text-2xl font-semibold text-[var(--app-text)]">Reset your password</h2>
+      <p class="text-sm text-[var(--app-text-muted)]">
+        Choose a strong password to secure your lingAi workspace.
+      </p>
     </div>
 
     <ZAlert v-if="formError" variant="error">{{ formError }}</ZAlert>

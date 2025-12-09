@@ -24,12 +24,12 @@ const resend = async () => {
 </script>
 
 <template>
-  <div class="space-y-6 rounded-3xl border border-white/5 bg-white/5 p-8 shadow-2xl">
+  <div class="space-y-6 rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-8 shadow-[var(--app-card-shadow)]">
     <div>
-      <h2 class="text-2xl font-semibold text-white">Verify your inbox</h2>
-      <p class="mt-2 text-sm text-white/70">
+      <h2 class="text-2xl font-semibold text-[var(--app-text)]">Verify your inbox</h2>
+      <p class="mt-2 text-sm text-[var(--app-text-muted)]">
         We just sent a verification link to <strong>{{ auth.user?.email }}</strong>. Please confirm your
-        email to access every feature of ZeeL.
+        email to unlock every feature of <span class="font-semibold text-[var(--app-accent-strong)]">lingAi</span>.
       </p>
     </div>
 

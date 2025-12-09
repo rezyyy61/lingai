@@ -34,8 +34,10 @@ onBeforeUnmount(() => auth.resetErrors())
 <template>
   <div class="space-y-6">
     <div>
-      <h2 class="text-2xl font-semibold text-white">Forgot password?</h2>
-      <p class="text-sm text-white/60">Enter your email and we will send a reset link.</p>
+      <h2 class="text-2xl font-semibold text-[var(--app-text)]">Forgot password?</h2>
+      <p class="text-sm text-[var(--app-text-muted)]">
+        Enter your email and we’ll send a reset link for your lingAi account.
+      </p>
     </div>
 
     <ZAlert v-if="successMessage" variant="success">{{ successMessage }}</ZAlert>
@@ -53,9 +55,9 @@ onBeforeUnmount(() => auth.resetErrors())
       <ZButton type="submit" :loading="auth.loading">Send reset link</ZButton>
     </form>
 
-    <p class="text-center text-sm text-white/70">
+    <p class="text-center text-sm text-[var(--app-text-muted)]">
       Back to
-      <RouterLink class="text-primary font-semibold" :to="{ name: 'login' }">login</RouterLink>
+      <RouterLink class="font-semibold text-[var(--app-accent-strong)]" :to="{ name: 'login' }">login</RouterLink>
     </p>
   </div>
 </template>

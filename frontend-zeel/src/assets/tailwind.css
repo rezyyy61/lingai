@@ -81,3 +81,88 @@
     text-decoration: underline;
   }
 }
+
+@layer components {
+  .zee-card {
+    border-radius: 28px;
+    border: 1px solid var(--app-border);
+    background-color: var(--app-surface);
+    box-shadow: var(--app-card-shadow);
+    backdrop-filter: blur(18px);
+  }
+
+  .zee-input {
+    width: 100%;
+    border-radius: 9999px;
+    border: 1px solid var(--app-border);
+    background-color: var(--app-surface-elevated);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: var(--app-text);
+    outline: none;
+    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease, transform 150ms ease;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  }
+
+  .zee-input::placeholder {
+    color: var(--app-text-muted);
+    opacity: 0.7;
+  }
+
+  .zee-input:focus-visible {
+    border-color: var(--app-accent);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.04),
+      0 0 0 4px rgba(248, 153, 72, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .zee-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .zee-btn {
+    position: relative;
+    border-radius: 9999px;
+    background-image: linear-gradient(135deg, #f97316, #ea580c);
+    color: #f9fafb;
+    box-shadow:
+      0 18px 45px rgba(124, 45, 18, 0.55),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
+    transform-origin: center;
+  }
+
+  .zee-btn:hover:not(:disabled) {
+    box-shadow:
+      0 22px 60px rgba(124, 45, 18, 0.6),
+      0 0 0 1px rgba(255, 255, 255, 0.09);
+    transform: translateY(-1px);
+  }
+
+  .zee-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow:
+      0 12px 30px rgba(124, 45, 18, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .zee-btn:focus-visible {
+    outline: 2px solid rgba(248, 153, 72, 0.45);
+    outline-offset: 2px;
+  }
+
+  .zee-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .text-zeel-muted {
+    color: var(--app-text-muted);
+  }
+
+  .text-zeel-primary {
+    color: var(--app-accent-strong);
+  }
+}

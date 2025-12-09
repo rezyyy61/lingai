@@ -53,16 +53,18 @@ onBeforeUnmount(() => auth.resetErrors())
 </script>
 
 <template>
-  <main class="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+  <main class="min-h-screen bg-[var(--app-bg)] text-[var(--app-text)] flex items-center justify-center">
     <div class="w-full max-w-md px-6">
-      <div class="space-y-8">
-        <header class="space-y-3">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.4em] text-zeel-muted/90">
-            Return to campus
+      <div class="space-y-8 rounded-[28px] border border-[var(--app-border)] bg-[var(--app-surface)] p-6 shadow-[var(--app-card-shadow)]">
+        <header class="space-y-3 text-center">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.4em] text-[var(--app-text-muted)]">
+            Welcome back
           </p>
-          <h2 class="text-3xl font-semibold text-white">Sign in to your ZeeL academy</h2>
-          <p class="text-sm text-zeel-muted">
-            Continue your curated curriculum with an academic-grade AI mentor focused on fluency and context.
+          <h2 class="text-2xl font-semibold text-[var(--app-text)]">
+            Sign in to your <span class="text-[var(--app-accent-strong)]">lingAi</span> studio
+          </h2>
+          <p class="text-sm text-[var(--app-text-muted)]">
+            Continue your focused practice with an AI language mentor tuned to your workspace.
           </p>
         </header>
 
@@ -89,29 +91,29 @@ onBeforeUnmount(() => auth.resetErrors())
             />
           </div>
 
-          <div class="flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-zeel-muted">
-            <label class="flex items-center gap-2 text-zeel-muted">
+          <div class="flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-[var(--app-text-muted)]">
+            <label class="flex items-center gap-2">
               <input
                 type="checkbox"
                 v-model="form.remember"
-                class="size-4 rounded border border-white/20 bg-transparent text-zeel-primary focus:ring-zeel-primary"
+                class="size-4 rounded border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-accent-strong)] focus:ring-[var(--app-accent)]"
               />
               Remember me
             </label>
             <RouterLink
-              class="text-zeel-primary transition hover:text-cyan-200"
+              class="text-[var(--app-accent-strong)] transition hover:text-[var(--app-accent)]"
               :to="{ name: 'forgot-password' }"
             >
               Forgot password?
             </RouterLink>
           </div>
 
-          <ZButton type="submit" :loading="auth.loading">Enter academy</ZButton>
+          <ZButton type="submit" :loading="auth.loading">Enter lingAi</ZButton>
         </form>
 
-        <p class="text-center text-sm text-zeel-muted">
-          New to ZeeL?
-          <RouterLink class="text-zeel-primary hover:text-cyan-200" :to="{ name: 'register' }">
+        <p class="text-center text-sm text-[var(--app-text-muted)]">
+          New to <span class="font-semibold text-[var(--app-accent-strong)]">lingAi</span>?
+          <RouterLink class="text-[var(--app-accent-strong)] hover:text-[var(--app-accent)]" :to="{ name: 'register' }">
             Create an account
           </RouterLink>
         </p>
@@ -119,4 +121,3 @@ onBeforeUnmount(() => auth.resetErrors())
     </div>
   </main>
 </template>
-
