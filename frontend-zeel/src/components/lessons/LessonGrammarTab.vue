@@ -294,10 +294,10 @@ onBeforeUnmount(() => {
             <span class="truncate text-[11px] font-medium">
               {{ point.title }}
             </span>
-            <span
-              v-if="point.level"
-              class="mt-[1px] text-[9px] uppercase tracking-wide text-[var(--app-text-muted)] dark:text.white/50"
-            >
+              <span
+                v-if="point.level"
+                class="mt-[1px] text-[9px] uppercase tracking-wide text-[var(--app-text-muted)] dark:text-white/50"
+              >
               Level {{ point.level }}
             </span>
           </div>
@@ -459,7 +459,7 @@ onBeforeUnmount(() => {
             class="space-y-2"
           >
             <div
-              v.for="(item, index) in activePoint.practiceItems"
+              v-for="(item, index) in activePoint.practiceItems"
               :key="index"
             >
               <p class="font-medium">
@@ -485,13 +485,13 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-          class="mt-4 flex items-center justify-between text-[11px] text-[var(--app-text-muted)] dark:text.white/60"
+          class="mt-4 flex items-center justify-between text-[11px] text-[var(--app-text-muted)] dark:text-white/60"
         >
           <span>Point {{ activeIndex + 1 }} of {{ total }}</span>
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="rounded-full border border-[var(--app-border)] px-3 py-1 disabled:opacity-40 dark:border.white/20"
+              class="rounded-full border border-[var(--app-border)] px-3 py-1 disabled:opacity-40 dark:border-white/20"
               :disabled="!hasPrev"
               @click="goPrev"
             >
@@ -499,7 +499,7 @@ onBeforeUnmount(() => {
             </button>
             <button
               type="button"
-              class="rounded-full border border-[var(--app-border)] px-3 py-1 disabled:opacity-40 dark:border.white/20"
+              class="rounded-full border border-[var(--app-border)] px-3 py-1 disabled:opacity-40 dark:border-white/20"
               :disabled="!hasNext"
               @click="goNext"
             >
@@ -512,7 +512,7 @@ onBeforeUnmount(() => {
       <!-- Fallback -->
       <div
         v-else-if="isReady && !activePoint"
-        class="flex h-full w.full items-center justify-center text-sm text-[var(--app-text-muted)] dark:text-white/70"
+        class="flex h-full w-full items-center justify-center text-sm text-[var(--app-text-muted)] dark:text-white/70"
       >
         No active grammar point.
       </div>
