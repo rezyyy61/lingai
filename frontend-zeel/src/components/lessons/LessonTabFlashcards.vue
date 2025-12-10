@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Icon } from '@iconify/vue'
 import Flashcard from './flashcards/Flashcard.vue'
 import GenerateFlashcardsModal from './GenerateFlashcardsModal.vue'
 import { useLessonFlashcards } from '@/composables/useLessonFlashcards'
@@ -33,6 +34,33 @@ const isGenerationPending = ref(false)
 const toastMessage = ref('')
 let toastTimeout: number | null = null
 let pollingInterval: number | null = null
+const isFocusMode = ref(false)
+
+const generationStorageKey = computed(
+  () => `zeel:flashcards-generating:${props.lessonId}`,
+)
+
+const loadGenerationState = () => {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(generationStorageKey.value) === '1'
+  } catch {
+    return false
+  }
+}
+
+const persistGenerationState = (pending: boolean) => {
+  if (typeof window === 'undefined') return
+  try {
+    if (pending) {
+      window.localStorage.setItem(generationStorageKey.value, '1')
+    } else {
+      window.localStorage.removeItem(generationStorageKey.value)
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 const openGenerateModal = () => {
   showGenerateModal.value = true
@@ -82,6 +110,7 @@ watch(isReady, (ready) => {
       pushToast('Flashcards are ready')
     }
     isGenerationPending.value = false
+    persistGenerationState(false)
     stopPolling()
   }
 })
@@ -91,6 +120,15 @@ watch(isGenerationPending, (pending) => {
     startPolling()
   } else {
     stopPolling()
+  }
+  persistGenerationState(pending)
+})
+
+onMounted(() => {
+  const pending = loadGenerationState()
+  if (pending) {
+    isGenerationPending.value = true
+    startPolling()
   }
 })
 
@@ -106,48 +144,57 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
 
 <template>
   <section class="flex h-full flex-col text-[var(--app-text)]">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="space-y-1">
-        <p class="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--app-text-muted)]">
+    <!-- Minimal header (hidden in focus mode) -->
+    <div
+      v-if="!isFocusMode"
+      class="flex items-center justify-between gap-3"
+    >
+      <div class="space-y-0.5">
+        <p class="text-xs font-semibold">
           Flashcards
         </p>
-        <p class="text-sm text-[var(--app-text-muted)]">
-          Review key vocabulary from this lesson
+        <p class="text-[11px] text-[var(--app-text-muted)]">
+          Based on this lesson’s vocabulary
         </p>
       </div>
-      <div class="flex flex-wrap items-center gap-3 text-xs text-[var(--app-text-muted)]">
-        <span class="rounded-full border border-[var(--app-border)] px-3 py-1">
-          Card: {{ reviewed }} / {{ total }}
-        </span>
-        <span class="rounded-full border border-[var(--app-border)] px-3 py-1">
-          Remaining: {{ remaining }}
+      <div class="flex items-center gap-2 text-[11px] text-[var(--app-text-muted)]">
+        <span
+          v-if="total"
+          class="hidden rounded-full border border-[var(--app-border)] px-2 py-1 sm:inline-flex"
+        >
+          {{ reviewed }} / {{ total }}
         </span>
         <button
           type="button"
-          class="rounded-full border border-[var(--app-border)] px-3 py-1 font-semibold text-[var(--app-text)] transition hover:bg-[var(--app-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-40"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[var(--app-border)]"
           :disabled="isGenerationPending"
           @click="openGenerateModal"
         >
-          Generate flashcards
+          <span class="text-xs">AI</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[var(--app-border)]"
+          :disabled="!isReady || !currentCard"
+          @click="isFocusMode = true"
+        >
+          <Icon
+            icon="solar:fullscreen-bold-duotone"
+            class="h-4 w-4"
+          />
         </button>
       </div>
     </div>
 
-    <div class="mt-3 h-2 overflow-hidden rounded-full bg-[var(--app-panel-muted)]">
-      <div
-        class="h-full rounded-full bg-[var(--app-accent-secondary)] transition-all duration-300"
-        :style="{ width: progressPercent + '%' }"
-      />
-    </div>
-
+    <!-- Toast (hidden in focus mode) -->
     <div
-      v-if="toastMessage"
+      v-if="toastMessage && !isFocusMode"
       class="mt-4 rounded-full border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-2 text-center text-xs text-[var(--app-text)]"
     >
       {{ toastMessage }}
     </div>
 
-    <div class="mt-6 flex flex-1 flex-col items-center justify-center gap-8">
+    <div class="mt-4 flex flex-1 flex-col items-center justify-center gap-8">
       <div v-if="isError" class="flex flex-col items-center gap-3 text-sm text-[var(--app-accent-strong)]">
         <p>Something went wrong while loading flashcards.</p>
         <button
@@ -187,39 +234,55 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
 
       <div
         v-else-if="isLoading && !isReady && !isEmpty"
-        class="flex w-full max-w-3xl flex-col gap-4"
+        class="flex w-full max-w-sm flex-col gap-4 sm:max-w-md"
       >
-        <div class="w-full aspect-[4/3] animate-pulse rounded-[32px] bg-[var(--app-panel-muted)]" />
+        <div class="w-full aspect-[3/4] animate-pulse rounded-3xl bg-[var(--app-panel-muted)]" />
         <div class="mx-auto flex gap-4">
-          <div class="h-12 w-32 animate-pulse rounded-full bg-[var(--app-panel-muted)]" />
-          <div class="h-12 w-32 animate-pulse rounded-full bg-[var(--app-panel-muted)]" />
+          <div class="h-10 w-10 animate-pulse rounded-full bg-[var(--app-panel-muted)]" />
+          <div class="h-10 w-10 animate-pulse rounded-full bg-[var(--app-panel-muted)]" />
         </div>
       </div>
 
       <div
         v-else-if="emptyStateVisible"
-        class="flex flex-col items-center justify-center gap-4 rounded-[20px] border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-6 py-10 text-center text-sm text-[var(--app-text-muted)]"
+        class="flex flex-col items-center justify-center gap-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-6 py-8 text-center text-sm text-[var(--app-text-muted)]"
       >
         <p class="text-base text-[var(--app-text)]">No flashcards for this lesson yet.</p>
         <p class="text-xs text-[var(--app-text-muted)]">
           Generate a set of key vocabulary to start practicing.
         </p>
         <button
-          class="rounded-full bg-[var(--app-accent)] px-6 py-2 text-sm font-semibold text-white shadow-[0_15px_30px_rgba(249,115,22,0.3)] transition hover:bg-[var(--app-accent-strong)]"
+          class="rounded-full bg-[var(--app-accent)] px-6 py-2 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(249,115,22,0.3)] transition hover:bg-[var(--app-accent-strong)]"
           @click="openGenerateModal"
         >
           Generate flashcards
         </button>
       </div>
 
-      <div v-else-if="isReady && currentCard" class="w-full">
+      <div
+        v-else-if="isReady && currentCard"
+        class="relative flex w-full flex-1 flex-col items-center justify-center"
+      >
+        <!-- exit focus button -->
+        <button
+          v-if="isFocusMode"
+          type="button"
+          class="absolute left-0 top-0 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm dark:border-[var(--app-border)]"
+          @click="isFocusMode = false"
+        >
+          <Icon
+            icon="solar:arrow-left-linear"
+            class="h-4 w-4"
+          />
+        </button>
+
         <Transition name="fade-scale" mode="out-in">
           <div
             key="flashcards"
-            class="flex h-full w-full flex-col items-center gap-8"
+            class="flex h-full w-full flex-col items-center justify-center gap-6"
           >
             <div class="flex w-full flex-1 items-center justify-center">
-              <div class="w-full max-w-4xl">
+              <div class="w-full max-w-sm sm:max-w-md">
                 <Flashcard
                   :key="currentCard.id"
                   :wordId="currentCard.id"
@@ -233,26 +296,32 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
               </div>
             </div>
 
-            <div class="mt-auto flex w-full flex-col items-center gap-3 text-xs text-[var(--app-text-muted)]">
-              <div class="flex w-full max-w-2xl gap-4">
-                <button
-                  class="flex-1 rounded-[999px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-4 text-base font-semibold text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:opacity-40"
-                  :disabled="!hasPrev"
-                  @click="goPrev"
-                >
-                  Previous
-                </button>
-                <button
-                  class="flex-1 rounded-[999px] bg-[var(--app-accent)] px-6 py-4 text-base font-semibold text-white transition hover:bg-[var(--app-accent-strong)] disabled:opacity-40"
-                  :disabled="!hasNext"
-                  @click="goNext"
-                >
-                  Next
-                </button>
-              </div>
-              <p>
-                {{ remaining }} cards remaining
-              </p>
+            <!-- navigation hidden in focus mode to keep only card visible -->
+            <div
+              v-if="!isFocusMode"
+              class="mt-4 flex w-full items-center justify-center gap-10 text-xs text-[var(--app-text-muted)]"
+            >
+              <button
+                type="button"
+                class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:opacity-30"
+                :disabled="!hasPrev"
+                @click="goPrev"
+              >
+                <span class="text-base">←</span>
+              </button>
+
+              <span class="text-[11px] font-semibold">
+                {{ reviewed }} / {{ total }}
+              </span>
+
+              <button
+                type="button"
+                class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:opacity-30"
+                :disabled="!hasNext"
+                @click="goNext"
+              >
+                <span class="text-base">→</span>
+              </button>
             </div>
           </div>
         </Transition>

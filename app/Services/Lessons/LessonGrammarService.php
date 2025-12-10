@@ -25,29 +25,56 @@ class LessonGrammarService
         $targetLabel = $this->labelForLanguage($targetLanguage);
         $supportLabel = $this->labelForLanguage($supportLanguage);
 
-        $wordCount = str_word_count(strip_tags($lesson->original_text));
+        $rawText = strip_tags($lesson->original_text);
+        $plainText = trim(preg_replace('/\s+/', ' ', $rawText));
+
+        $wordCount = str_word_count($plainText);
+
+        $maxChars = 4000;
+        if (mb_strlen($plainText) > $maxChars) {
+            $plainText = mb_substr($plainText, 0, $maxChars) . '...';
+        }
 
         $customBlock = '';
 
         if ($customPrompt !== null && trim($customPrompt) !== '') {
             $customBlock = "\n\nAdditional user preferences and instructions for grammar. Follow them only if they do not conflict with the JSON schema or the rules:\n" . $customPrompt . "\n";
         }
+
         $userContent = <<<EOT
-You will extract and teach the most important grammar points from a {$targetLabel} lesson.
+You will extract and teach the most important grammar points from a {$targetLabel} lesson in a concise way.
 
 The lesson text is in {$targetLabel} (language code: {$targetLanguage}).
 The learner's main language is {$supportLabel} (language code: {$supportLanguage}).
 The approximate length of the text is {$wordCount} words.
 
-Your task:
+Your goals:
 
-1) Choose 1–3 core grammar points that are truly central to this lesson.
+1) Focus and simplicity
+- Choose only 1–2 core grammar points that are truly central to this lesson.
+- Use short, clear explanations (maximum 3–4 sentences per grammar point).
+- Avoid academic or theoretical language. Speak like a friendly tutor.
+
 2) For each grammar point:
-   - Explain it in clear, simple {$supportLabel}, as if you are talking to a motivated but non-expert learner.
-   - Show a very short pattern.
-   - Give 2–3 very clear example sentences.
-   - If possible, include at least 1 example that is very close to the lesson text and 1 extra simple example.
-3) Build multiple-choice grammar exercises that go from easy to harder.
+- Explain it in clear, simple {$supportLabel}.
+- Include:
+  - WHEN we use this grammar in real life.
+  - HOW we build it (structure).
+  - ONE common mistake to avoid.
+- Show a single short pattern (one line).
+- Provide exactly 2 very clear example sentences:
+  - At least 1 example close to the lesson text (mark with "source": "lesson").
+  - At least 1 very simple example for the learner (mark with "source": "extra").
+
+3) Exercises:
+- For each grammar point, create 1–2 multiple-choice exercises (easy and medium difficulty only).
+- Do NOT create "hard" exercises. Keep everything practical and clear.
+- All exercises must have:
+  - "type": "mcq"
+  - 3–4 options
+  - Exactly one option with "is_correct": true.
+  - Wrong options that are plausible and related to the same grammar point (not random grammar).
+- "difficulty" must be "easy" or "medium".
 
 Return a single JSON object with this exact shape:
 
@@ -75,7 +102,7 @@ Return a single JSON object with this exact shape:
   "exercises": [
     {
       "grammar_id": "short_machine_friendly_key",
-      "difficulty": "easy|medium|hard",
+      "difficulty": "easy|medium",
       "type": "mcq",
       "question_prompt": "Question in {$targetLabel} that focuses on this grammar point.",
       "instructions": "Short instructions in {$supportLabel} (or very simple {$targetLabel}).",
@@ -92,7 +119,7 @@ Return a single JSON object with this exact shape:
   ]
 }
 
-Example language rules:
+Language rules:
 
 - The field "sentence" in each example MUST be written ONLY in {$targetLabel}.
 - Never write example sentences in {$supportLabel} in the "sentence" field.
@@ -107,18 +134,15 @@ Pattern rules:
 
 Example selection rules:
 
-- For each grammar point, choose 2–3 examples.
+- For each grammar point, choose exactly 2 examples.
 - At least one example SHOULD be taken from the lesson text or a very close variant (mark it with "source": "lesson").
 - At least one example SHOULD be a very simple, clean sentence suitable for the learner's level (mark it with "source": "extra").
 
 Exercise rules:
 
 - All exercises must be multiple-choice ("type": "mcq").
-- For each grammar point, create a small progression of exercises:
-  - "easy": recognition and very controlled practice (e.g. choose the correct form).
-  - "medium": choose the correct sentence or phrase in context.
-  - "hard": subtler contrasts or common mistakes.
-- Use 3–5 options per exercise.
+- For each grammar point, create 1–2 exercises with "difficulty": "easy" or "medium".
+- Use 3–4 options per exercise.
 - Exactly one option must have "is_correct": true.
 - All other options must be plausible but wrong and clearly related to the same grammar point (not random grammar).
 
@@ -130,22 +154,22 @@ General rules:
 - If the original {$targetLabel} sentence is a polite request, the translation must also sound polite and natural in {$supportLabel}, NOT a word-by-word mapping.
 - It is better to adapt the sentence slightly than to keep an unnatural literal translation.
 - Stay close to the actual lesson text and its topic; do not invent completely unrelated examples.
+- Keep the JSON compact and avoid unnecessary text.
 - Return only JSON, no extra text.
 
 {$customBlock}
 
 Lesson text:
 
-{$lesson->original_text}
+{$plainText}
 EOT;
-
 
         $payload = [
             'model' => config('services.openai.chat_model', 'gpt-4.1-mini'),
             'messages' => [
                 [
                     'role' => 'system',
-                    'content' => 'You are a helpful teacher who extracts and teaches grammar points from a lesson and returns structured JSON. Always follow the JSON schema strictly.',
+                    'content' => 'You are a helpful teacher who extracts and teaches grammar points from a lesson and returns structured JSON. Always follow the JSON schema strictly and keep explanations and exercises concise.',
                 ],
                 [
                     'role' => 'user',
@@ -153,11 +177,14 @@ EOT;
                 ],
             ],
             'response_format' => ['type' => 'json_object'],
+            'max_tokens' => 1200,
+            'temperature' => 0.3,
         ];
 
         $response = Http::withToken(config('services.openai.key'))
-            ->timeout(60)
+            ->timeout(90)
             ->connectTimeout(10)
+            ->retry(2, 1000)
             ->post($endpoint, $payload)
             ->throw()
             ->json();

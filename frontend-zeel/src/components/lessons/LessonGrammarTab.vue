@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Icon } from '@iconify/vue'
 import { useLessonGrammar } from '@/composables/useLessonGrammar'
 import { generateLessonGrammar } from '@/api/lessonGrammar'
 
@@ -30,10 +31,37 @@ let toastTimeout: number | null = null
 const isGenerationPending = ref(false)
 const pendingBaselineSignature = ref<string | null>(null)
 let pollingInterval: number | null = null
+const isFocusMode = ref(false)
 
 const pointsSignature = computed(() =>
   grammarPoints.value.map((p) => p.id).join('-'),
 )
+
+const generationStorageKey = computed(
+  () => `zeel:grammar-generating:${props.lessonId}`,
+)
+
+const loadGenerationState = () => {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(generationStorageKey.value) === '1'
+  } catch {
+    return false
+  }
+}
+
+const persistGenerationState = (pending: boolean) => {
+  if (typeof window === 'undefined') return
+  try {
+    if (pending) {
+      window.localStorage.setItem(generationStorageKey.value, '1')
+    } else {
+      window.localStorage.removeItem(generationStorageKey.value)
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 const emptyStateVisible = computed(
   () => isEmpty.value && !isGenerationPending.value,
@@ -143,12 +171,14 @@ const handleGenerateGrammar = async () => {
   if (isGenerationPending.value) return
   try {
     isGenerationPending.value = true
+    persistGenerationState(true)
     pendingBaselineSignature.value = pointsSignature.value || null
     await generateLessonGrammar(props.lessonId, {})
     startPolling()
     pushToast('Grammar notes generation queued')
   } catch {
     isGenerationPending.value = false
+    persistGenerationState(false)
     pendingBaselineSignature.value = null
     stopPolling()
     pushToast('Failed to queue grammar generation')
@@ -164,9 +194,18 @@ watch(pointsSignature, (signature) => {
   if (!isGenerationPending.value) return
   if (signature && signature !== pendingBaselineSignature.value) {
     isGenerationPending.value = false
+    persistGenerationState(false)
     pendingBaselineSignature.value = null
     stopPolling()
     pushToast('Grammar notes are ready')
+  }
+})
+
+onMounted(() => {
+  const pending = loadGenerationState()
+  if (pending) {
+    isGenerationPending.value = true
+    startPolling()
   }
 })
 
@@ -181,7 +220,10 @@ onBeforeUnmount(() => {
     class="flex h-full w-full max-w-full flex-col overflow-x-hidden text-[var(--app-text)] dark:text-white"
   >
     <!-- Header -->
-    <div class="flex w-full flex-wrap items-center justify-between gap-3">
+    <div
+      v-if="!isFocusMode"
+      class="flex w-full flex-wrap items-center justify-between gap-3"
+    >
       <div class="space-y-1">
         <p
           class="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--app-text-muted)] dark:text-white/60"
@@ -203,17 +245,32 @@ onBeforeUnmount(() => {
         </span>
         <button
           type="button"
-          class="w-full rounded-full border border-[var(--app-border)] px-3 py-1 text-center font-semibold text-[var(--app-text)] transition hover:bg-[var(--app-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto dark:border-white/15 dark:text-white/80 dark:hover:text-white"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15"
           :disabled="isGenerationPending"
           @click="handleGenerateGrammar"
         >
-          Generate grammar notes
+          <Icon
+            icon="solar:magic-stick-3-bold-duotone"
+            class="h-4 w-4"
+          />
+        </button>
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15"
+          :disabled="!isReady || !activePoint"
+          @click="isFocusMode = true"
+        >
+          <Icon
+            icon="solar:fullscreen-bold-duotone"
+            class="h-4 w-4"
+          />
         </button>
       </div>
     </div>
 
     <!-- Progress bar -->
     <div
+      v-if="!isFocusMode"
       class="mt-3 h-1.5 w-full max-w-full overflow-hidden rounded-full bg-[var(--app-panel-muted)]/80 dark:bg-white/10"
     >
       <div
@@ -223,7 +280,10 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Toast + states -->
-    <div class="mt-3 w-full max-w-full space-y-2 text-xs">
+    <div
+      v-if="!isFocusMode"
+      class="mt-3 w-full max-w-full space-y-2 text-xs"
+    >
       <div
         v-if="toastMessage"
         class="w-full rounded-full border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-2 text-center text-[var(--app-text)] dark:border-white/10 dark:bg-white/5 dark:text-white/80"
@@ -271,7 +331,10 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Tabs for grammar points -->
-    <div class="mt-4 flex w-full max-w-full flex-wrap items-center gap-2 border-b border-[var(--app-border)] pb-2" v-if="isReady && grammarPoints.length">
+    <div
+      v-if="isReady && grammarPoints.length && !isFocusMode"
+      class="mt-4 flex w-full max-w-full flex-wrap items-center gap-2 border-b border-[var(--app-border)] pb-2"
+    >
       <div class="custom-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
         <button
           v-for="(point, index) in grammarPoints"
@@ -333,9 +396,41 @@ onBeforeUnmount(() => {
 
     <!-- Main content: card with its own scroll -->
     <div class="mt-4 flex min-h-0 w-full max-w-full flex-1">
-      <!-- Loading skeleton -->
+      <!-- Explicit generation loading state -->
       <div
-        v-if="isLoading && !isReady && !isEmpty"
+        v-if="isGenerationPending && !isReady"
+        class="flex w-full flex-col items-center justify-center gap-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-6 text-center text-sm text-[var(--app-text-muted)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-white/70"
+      >
+        <div class="flex items-center justify-center gap-3 text-[var(--app-text)] dark:text-white">
+          <svg
+            class="h-4 w-4 animate-spin text-[var(--app-accent)]"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="3"
+              fill="none"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 0 1 8-8v3.5a4.5 4.5 0 0 0-4.5 4.5H4Z"
+            />
+          </svg>
+          <span>Generating grammar notes for this lesson…</span>
+        </div>
+        <p class="text-[11px] text-[var(--app-text-muted)] dark:text-white/60">
+          This may take a short moment. We’ll load the teacher’s grammar view automatically when it’s ready.
+        </p>
+      </div>
+
+      <!-- Loading skeleton while fetching existing notes -->
+      <div
+        v-else-if="isLoading && !isReady && !isEmpty"
         class="flex w-full flex-col gap-3 text-[var(--app-text-muted)] dark:text-white/60"
       >
         <div class="h-4 w-40 animate-pulse rounded-full bg-[var(--app-panel-muted)] dark:bg-[var(--app-surface-dark)]/80" />
@@ -347,10 +442,22 @@ onBeforeUnmount(() => {
       <!-- Active point card -->
       <div
         v-else-if="isReady && activePoint"
-        class="mx-auto flex w-full max-w-[min(100%,40rem)] max-h-[70vh] flex-col overflow-y-auto rounded-[26px] border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-4 text-sm leading-relaxed text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] sm:px-5 sm:py-5 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-white"
+        class="mx-auto flex h-full w-full max-w-sm flex-col overflow-y-auto rounded-[26px] border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-4 text-sm leading-relaxed text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] sm:max-w-md sm:px-5 sm:py-5 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-white"
         :dir="analysisDirection"
         :class="analysisDirection === 'rtl' ? 'text-right' : 'text-left'"
       >
+        <!-- Focus mode back button -->
+        <button
+          v-if="isFocusMode"
+          type="button"
+          class="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)]/80 text-[var(--app-text)] shadow-sm dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
+          @click="isFocusMode = false"
+        >
+          <Icon
+            icon="solar:arrow-left-linear"
+            class="h-4 w-4"
+          />
+        </button>
         <header class="pb-3">
           <p
             class="text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--app-text-muted)] dark:text-white/60"
@@ -485,6 +592,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div
+          v-if="!isFocusMode"
           class="mt-4 flex items-center justify-between text-[11px] text-[var(--app-text-muted)] dark:text-white/60"
         >
           <span>Point {{ activeIndex + 1 }} of {{ total }}</span>

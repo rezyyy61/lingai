@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { Icon } from '@iconify/vue'
 import { fetchLessonWordTts } from '@/api/lessonFlashcards'
 
 const props = defineProps<{
@@ -69,31 +70,48 @@ async function handlePlayClick(event: MouseEvent) {
   >
     <!-- FRONT -->
     <div
-      class="absolute inset-0 rounded-[24px] border border-[var(--app-border)] bg-gradient-to-br from-[var(--app-panel)] via-[var(--app-surface-elevated)] to-[var(--app-panel)] px-6 py-6 text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] [backface-visibility:hidden] sm:rounded-[32px] sm:px-8 sm:py-8 lg:rounded-[40px] lg:px-12 lg:py-10 dark:border-white/15 dark:bg-gradient-to-br dark:from-[var(--app-surface-dark)] dark:via-[#050505] dark:to-[var(--app-surface-dark)] dark:text-white dark:shadow-[0_40px_90px_rgba(0,0,0,0.65)]"
+      class="absolute inset-0 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-6 text-[var(--app-text)] shadow-md [backface-visibility:hidden] sm:rounded-[32px] sm:px-8 sm:py-8 lg:rounded-[40px] lg:px-12 lg:py-10 dark:border-white/10 dark:bg-[#202124] dark:text-white"
     >
-      <div class="flex h-full flex-col justify-between">
-        <div class="flex items-center justify-between text-sm text-[var(--app-text-muted)] dark:text-white/60">
-          <span>Flashcard</span>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-lg text-[var(--app-text)] hover:bg-[var(--app-panel-muted)] disabled:opacity-40 dark:border-transparent dark:bg-[var(--app-surface-dark-elevated)] dark:text-white"
-              :disabled="isLoadingAudio"
-              @click.stop="handlePlayClick"
-            >
-              <span v-if="isLoadingAudio">…</span>
-              <span v-else-if="isPlaying">⏸</span>
-              <span v-else>🔊</span>
-            </button>
-            <span
-              v-if="partOfSpeech"
-              class="rounded-full bg-[var(--app-surface-elevated)] px-4 py-1 text-xs uppercase tracking-[0.3em] text-[var(--app-text)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-white"
-            >
-              {{ partOfSpeech }}
-            </span>
-          </div>
-        </div>
+      <!-- pronunciation icon -->
+      <button
+        type="button"
+        class="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/10 text-white backdrop-blur-sm dark:bg-white/10"
+        :disabled="isLoadingAudio"
+        @click.stop="handlePlayClick"
+      >
+        <Icon
+          v-if="!isLoadingAudio && !isPlaying"
+          icon="solar:soundwave-bold-duotone"
+          class="h-4 w-4"
+        />
+        <Icon
+          v-else-if="isPlaying"
+          icon="solar:pause-circle-bold-duotone"
+          class="h-4 w-4"
+        />
+        <svg
+          v-else
+          class="h-4 w-4 animate-spin text-current"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="3"
+            fill="none"
+          />
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 0 1 8-8v3.5a4.5 4.5 0 0 0-4.5 4.5H4Z"
+          />
+        </svg>
+      </button>
 
+      <div class="flex h-full flex-col justify-between">
         <div class="flex flex-1 flex-col items-center justify-center gap-3 text-center">
           <p class="max-w-full break-words text-3xl font-semibold leading-tight tracking-tight sm:text-4xl lg:text-6xl">
             {{ term }}
@@ -104,26 +122,16 @@ async function handlePlayClick(event: MouseEvent) {
         </div>
 
         <div class="pt-1 text-center text-xs text-[var(--app-text-muted)] dark:text-white/60">
-          Tap to see meaning, example, and translation
+          See answer
         </div>
       </div>
     </div>
 
     <!-- BACK -->
     <div
-      class="absolute inset-0 rounded-[24px] border border-[var(--app-accent-secondary)] bg-[var(--app-panel)] px-6 py-6 text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] [backface-visibility:hidden] rotate-y-180 sm:rounded-[32px] sm:px-8 sm:py-8 lg:rounded-[40px] lg:px-12 lg:py-10 dark:bg-[var(--app-surface-dark)] dark:text-white dark:shadow-[0_40px_90px_rgba(0,0,0,0.65)]"
+      class="absolute inset-0 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-panel)] px-6 py-6 text-[var(--app-text)] shadow-md [backface-visibility:hidden] rotate-y-180 sm:rounded-[32px] sm:px-8 sm:py-8 lg:rounded-[40px] lg:px-12 lg:py-10 dark:border-white/10 dark:bg-[#202124] dark:text-white"
     >
       <div class="flex h-full flex-col gap-5">
-        <div class="flex items-center justify-between text-sm text-[var(--app-text-muted)] dark:text-white/60">
-          <span>Details</span>
-          <span
-            v-if="partOfSpeech"
-            class="rounded-full bg-[var(--app-surface-elevated)] px-4 py-1 text-xs uppercase tracking-[0.3em] text-[var(--app-text)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-white"
-          >
-            {{ partOfSpeech }}
-          </span>
-        </div>
-
         <div class="flex-1 space-y-4 text-left text-sm sm:text-[15px]">
           <div class="space-y-1">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--app-text-muted)] dark:text-white/60">

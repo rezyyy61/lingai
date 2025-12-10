@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-import AppShell from '@/components/layout/AppShell.vue'
+import AppShellResponsive from '@/components/layout/AppShellResponsive.vue'
 import WorkspaceDashboard from '@/pages/WorkspaceDashboard.vue'
 import LoginPage from '@/pages/auth/LoginPage.vue'
 import RegisterPage from '@/pages/auth/RegisterPage.vue'
@@ -49,7 +49,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/workspace/:id',
     name: 'workspace',
-    component: AppShell,
+    component: AppShellResponsive,
     meta: { requiresAuth: true },
   },
   {
