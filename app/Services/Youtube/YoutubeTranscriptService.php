@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 use MrMySQL\YoutubeTranscript\Exceptions\NoTranscriptFoundException;
 use MrMySQL\YoutubeTranscript\Exceptions\TranscriptsDisabledException;
 use MrMySQL\YoutubeTranscript\TranscriptListFetcher;
+use Throwable;
 
 class YoutubeTranscriptService
 {
@@ -17,16 +18,84 @@ class YoutubeTranscriptService
 
     public function __construct()
     {
-        $httpClient = new Client([
-            'timeout' => (float) (config('services.youtube_transcript.timeout', 25)),
-            'connect_timeout' => (float) (config('services.youtube_transcript.connect_timeout', 10)),
+        $httpClient = new Client($this->clientOptions());
+        $httpFactory = new HttpFactory();
+
+        $this->fetcher = new TranscriptListFetcher($httpClient, $httpFactory, $httpFactory);
+    }
+
+    public function getTranscriptTextFromUrl(string $url, string $language = 'en'): ?string
+    {
+        $videoId = $this->extractVideoId($url);
+
+        if (! $videoId) {
+            Log::warning('YoutubeTranscriptService: could not extract video ID from URL', [
+                'url' => $url,
+            ]);
+
+            return null;
+        }
+
+        try {
+            $list = $this->fetcher->fetch($videoId);
+
+            $transcript = $list->findTranscript([$language]);
+            $segments = $transcript->fetch();
+
+            $text = $this->segmentsToText($segments);
+
+            if ($text === '') {
+                Log::warning('YoutubeTranscriptService: empty transcript text', [
+                    'video_id' => $videoId,
+                    'language' => $language,
+                ]);
+
+                return null;
+            }
+
+            return $text;
+        } catch (NoTranscriptFoundException $e) {
+            Log::warning('YoutubeTranscriptService: no transcript found', [
+                'video_id' => $videoId,
+                'language' => $language,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        } catch (TranscriptsDisabledException $e) {
+            $this->logDisabledTranscript($videoId, $language, $e);
+
+            return null;
+        } catch (Throwable $e) {
+            $this->logThrowableChain($e, [
+                'video_id' => $videoId,
+                'language' => $language,
+            ]);
+
+            report($e);
+
+            return null;
+        }
+    }
+
+    protected function clientOptions(): array
+    {
+        $cookie = trim((string) config('services.youtube_transcript.cookie', ''));
+
+        return [
+            'timeout' => (float) config('services.youtube_transcript.timeout', 25),
+            'connect_timeout' => (float) config('services.youtube_transcript.connect_timeout', 10),
             'http_errors' => false,
             'allow_redirects' => true,
-            'headers' => [
-                'User-Agent' => (string) config('services.youtube_transcript.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
+            'headers' => array_filter([
+                'User-Agent' => (string) config(
+                    'services.youtube_transcript.user_agent',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                ),
                 'Accept-Language' => (string) config('services.youtube_transcript.accept_language', 'en-US,en;q=0.9'),
                 'Accept' => (string) config('services.youtube_transcript.accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
-            ],
+                'Cookie' => $cookie !== '' ? $cookie : null,
+            ]),
             'on_stats' => function (TransferStats $stats) {
                 $handlerStats = $stats->getHandlerStats() ?? [];
 
@@ -49,70 +118,69 @@ class YoutubeTranscriptService
                     'error' => $stats->getHandlerErrorData(),
                 ]);
             },
-        ]);
-
-        $httpFactory = new HttpFactory();
-
-        $this->fetcher = new TranscriptListFetcher($httpClient, $httpFactory, $httpFactory);
+        ];
     }
 
-    public function getTranscriptTextFromUrl(string $url, string $language = 'en'): ?string
+    protected function logDisabledTranscript(string $videoId, string $language, TranscriptsDisabledException $e): void
     {
-        $videoId = $this->extractVideoId($url);
+        $cookieConfigured = trim((string) config('services.youtube_transcript.cookie', '')) !== '';
 
-        if (! $videoId) {
-            Log::warning('YoutubeTranscriptService: could not extract video ID from URL', [
-                'url' => $url,
-            ]);
+        Log::warning('YoutubeTranscriptService: transcripts disabled', [
+            'video_id' => $videoId,
+            'language' => $language,
+            'message' => $e->getMessage(),
+            'cookie_configured' => $cookieConfigured,
+        ]);
 
-            return null;
+        $this->debugWatchPage($videoId);
+    }
+
+    protected function debugWatchPage(string $videoId): void
+    {
+        if (! config('services.youtube_transcript.debug', false)) {
+            return;
         }
 
+        $client = new Client($this->clientOptions());
+
         try {
-            $list = $this->fetcher->fetch($videoId);
-            $transcript = $list->findTranscript([$language]);
-            $segments = $transcript->fetch();
+            $res = $client->get('https://www.youtube.com/watch?v=' . $videoId);
 
-            $parts = [];
+            $body = (string) $res->getBody();
 
-            foreach ($segments as $segment) {
-                $text = is_array($segment) ? ($segment['text'] ?? '') : '';
-                if ($text !== '') {
-                    $parts[] = $text;
-                }
-            }
-
-            $text = trim(implode(' ', $parts));
-
-            if ($text === '') {
-                Log::warning('YoutubeTranscriptService: empty transcript text', [
-                    'video_id' => $videoId,
-                    'language' => $language,
-                ]);
-
-                return null;
-            }
-
-            return $text;
-        } catch (NoTranscriptFoundException|TranscriptsDisabledException $e) {
-            Log::warning('YoutubeTranscriptService: no transcript or disabled', [
+            Log::warning('YoutubeTranscriptService: debug watch page', [
                 'video_id' => $videoId,
-                'language' => $language,
+                'status' => $res->getStatusCode(),
+                'content_type' => $res->getHeaderLine('Content-Type'),
+                'body_head' => mb_substr($body, 0, 1200),
+            ]);
+        } catch (Throwable $e) {
+            Log::error('YoutubeTranscriptService: debug watch page failed', [
+                'video_id' => $videoId,
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
             ]);
-
-            return null;
-        } catch (\Throwable $e) {
-            $this->logThrowableChain($e, [
-                'video_id' => $videoId,
-                'language' => $language,
-            ]);
-
-            report($e);
-
-            return null;
         }
+    }
+
+    protected function segmentsToText(mixed $segments): string
+    {
+        if (! is_iterable($segments)) {
+            return '';
+        }
+
+        $parts = [];
+
+        foreach ($segments as $segment) {
+            $text = is_array($segment) ? (string) ($segment['text'] ?? '') : '';
+            $text = trim($text);
+
+            if ($text !== '') {
+                $parts[] = $text;
+            }
+        }
+
+        return trim(implode(' ', $parts));
     }
 
     protected function extractVideoId(string $url): ?string
@@ -132,7 +200,7 @@ class YoutubeTranscriptService
         return null;
     }
 
-    protected function logThrowableChain(\Throwable $e, array $context = []): void
+    protected function logThrowableChain(Throwable $e, array $context = []): void
     {
         $chain = [];
         $current = $e;
@@ -157,7 +225,6 @@ class YoutubeTranscriptService
                         'headers' => [
                             'content-type' => $response->getHeaderLine('Content-Type'),
                             'location' => $response->getHeaderLine('Location'),
-                            'set-cookie' => $response->getHeader('Set-Cookie'),
                         ],
                         'body_head' => mb_substr($body, 0, 800),
                     ];

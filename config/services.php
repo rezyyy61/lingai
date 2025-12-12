@@ -43,5 +43,15 @@ return [
         'stt_model' => env('OPENAI_STT_MODEL', 'whisper-1'),
     ],
 
+    'youtube_transcript' => [
+        'timeout' => env('YOUTUBE_TRANSCRIPT_TIMEOUT', 25),
+        'connect_timeout' => env('YOUTUBE_TRANSCRIPT_CONNECT_TIMEOUT', 10),
+        'user_agent' => env('YOUTUBE_TRANSCRIPT_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
+        'accept_language' => env('YOUTUBE_TRANSCRIPT_ACCEPT_LANGUAGE', 'en-US,en;q=0.9'),
+        'accept' => env('YOUTUBE_TRANSCRIPT_ACCEPT', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
+        'cookie' => env('YOUTUBE_TRANSCRIPT_COOKIE', ''),
+        'debug' => env('YOUTUBE_TRANSCRIPT_DEBUG', false),
+    ],
+
 
 ];
