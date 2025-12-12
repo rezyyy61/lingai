@@ -141,6 +141,12 @@ const handleYoutubeSubmit = async () => {
   }
 }
 
+const fileInput = ref<HTMLInputElement | null>(null)
+
+const triggerFileInput = () => {
+  fileInput.value?.click()
+}
+
 const handleAudioSubmit = async () => {
   if (audioLoading.value) return
   if (!props.workspaceId) {
@@ -164,6 +170,11 @@ const handleAudioSubmit = async () => {
     })
     resetForms()
     emit('created', lesson.id)
+
+    // Reset file input
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
   } catch (error) {
     errorMessage.value = 'Failed to create audio lesson'
     console.error(error)
@@ -334,7 +345,7 @@ const handleAudioSubmit = async () => {
               <!-- Audio Form -->
               <form v-else key="audio" @submit.prevent="handleAudioSubmit" class="space-y-6 pt-2">
                  <div 
-                   @click="$refs.fileInput.click()"
+                   @click="triggerFileInput"
                    class="group cursor-pointer rounded-2xl border-2 border-dashed border-[var(--app-border)] bg-[var(--app-panel-muted)] p-8 text-center transition-all hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
                    :class="audioForm.file ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)]' : ''"
                  >
