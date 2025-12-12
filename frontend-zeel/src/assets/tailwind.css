@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,163 +6,141 @@
 
 @layer base {
   :root {
+    /* Brand Colors - Warm & Premium */
     --app-accent: #f97316;
-    --app-accent-soft: #ffe9d5;
+    --app-accent-soft: #fff3e6;
     --app-accent-strong: #c2410c;
 
     --app-accent-secondary: #22c55e;
-    --app-accent-secondary-soft: #d9f6e5;
+    --app-accent-secondary-soft: #dcfce7;
 
-    --app-bg: #f6f3ed;
-    --app-surface: #fdfaf4;
-    --app-surface-elevated: #fff7ed;
-    --app-panel: #fff2e2;
-    --app-panel-muted: #f7ecdf;
-    --app-border: #e0d8c7;
-    --app-border-strong: #c9b59a;
-    --app-text: #1f1c17;
-    --app-text-muted: #6d6456;
-    --app-overlay: rgba(15, 23, 42, 0.3);
-    --app-card-shadow: 0 30px 70px rgba(15, 23, 42, 0.12);
-    --app-card-shadow-strong: 0 45px 110px rgba(15, 23, 42, 0.18);
+    /* Light Theme (Warm/Paper feel) */
+    --app-bg: #f8f7f4;
+    --app-surface: #ffffff;
+    --app-surface-elevated: #ffffff;
+    --app-panel: #fcfbf9;
+    --app-panel-muted: #f4f2ed;
 
-    /* Legacy tokens kept for compatibility */
+    --app-border: #e6e1d6;
+    --app-border-strong: #d4cec0; /* Darker border for contrast */
+    
+    --app-text: #1a1918;
+    --app-text-muted: #6b665f;
+    
+    --app-overlay: rgba(15, 23, 42, 0.4);
+    
+    /* Shadows - softer & deeper */
+    --app-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+    --app-card-shadow-strong: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+
+    /* Legacy tokens compatibility */
     --app-surface-dark: var(--app-panel);
     --app-surface-dark-elevated: var(--app-panel);
     --app-border-dark: var(--app-border-strong);
   }
 
   html.dark {
-    --app-bg: #10100b;
-    --app-surface: #0b0a09;
-    --app-surface-elevated: #141312;
-    --app-panel: #141312;
-    --app-panel-muted: rgba(20, 19, 18, 0.9);
-    --app-border: rgba(255, 255, 255, 0.08);
-    --app-border-strong: rgba(255, 255, 255, 0.22);
-    --app-text: #f3f4f6;
-    --app-text-muted: #a5acba;
-    --app-overlay: rgba(0, 0, 0, 0.65);
-    --app-card-shadow: 0 35px 85px rgba(0, 0, 0, 0.55);
-    --app-card-shadow-strong: 0 55px 130px rgba(0, 0, 0, 0.7);
+    /* Dark Theme (Deep & Sleek - "Jazab") */
+    --app-bg: #0f1115; /* Rich Charcoal */
+    --app-surface: #181b21; /* Slightly lighter charcoal */
+    --app-surface-elevated: #232730; /* Elevating surface */
+    --app-panel: #1e2229;
+    --app-panel-muted: #2a2f3a;
 
-    --app-surface-dark: #0b0a09;
-    --app-surface-dark-elevated: #141312;
-    --app-border-dark: #272321;
+    --app-border: #2e3440;
+    --app-border-strong: #454d5e;
+    
+    --app-text: #eceff4;
+    --app-text-muted: #9ca3af;
+    
+    --app-overlay: rgba(13, 15, 20, 0.85);
+    --app-card-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
+    --app-card-shadow-strong: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
+
+    --app-surface-dark: #181b21;
+    --app-surface-dark-elevated: #232730;
+    --app-border-dark: #2e3440;
+    
+    --app-accent-soft: rgba(249, 115, 22, 0.12);
+    --app-accent-secondary-soft: rgba(34, 197, 94, 0.12);
   }
 
   html {
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Outfit', 'Inter', system-ui, sans-serif; /* Outfit for headings, Inter for body */
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
     @apply min-h-screen antialiased transition-colors duration-200;
-
-    background:
-      radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.8) 0, transparent 45%),
-      radial-gradient(circle at 100% 0, rgba(253, 228, 200, 0.85) 0, transparent 50%),
-      linear-gradient(to bottom right, var(--app-surface), var(--app-bg));
+    background-color: var(--app-bg);
     color: var(--app-text);
   }
-
-  html.dark body {
-    background:
-      radial-gradient(circle at 0 0, #292524 0, transparent 45%),
-      radial-gradient(circle at 100% 0, #1c1917 0, transparent 55%),
-      linear-gradient(to bottom right, #0b0a09, #020202);
-    color: var(--app-text);
+  
+  /* Selection color */
+  ::selection {
+    background-color: var(--app-accent);
+    color: white;
   }
+}
 
-  a {
-    color: var(--app-accent);
+@layer utilities {
+  .glass {
+    @apply backdrop-blur-xl bg-white/70 dark:bg-black/60 border border-white/20 dark:border-white/10;
   }
-
-  a:hover {
-    text-decoration: underline;
+  
+  .glass-card {
+    @apply backdrop-blur-md bg-[var(--app-surface)]/80 dark:bg-[var(--app-surface)]/60 border border-[var(--app-border)];
   }
 }
 
 @layer components {
   .zee-card {
-    border-radius: 28px;
+    border-radius: 24px;
     border: 1px solid var(--app-border);
     background-color: var(--app-surface);
     box-shadow: var(--app-card-shadow);
-    backdrop-filter: blur(18px);
+    transition: all 0.2s ease-out;
   }
 
   .zee-input {
     width: 100%;
-    border-radius: 9999px;
+    border-radius: 16px; /* Slightly less rounded than pill for modern feel */
     border: 1px solid var(--app-border);
     background-color: var(--app-surface-elevated);
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    padding: 0.8rem 1rem;
+    font-size: 0.95rem;
     color: var(--app-text);
     outline: none;
-    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease, transform 150ms ease;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    transition: all 0.2s ease;
   }
 
   .zee-input::placeholder {
     color: var(--app-text-muted);
-    opacity: 0.7;
+    opacity: 0.6;
   }
 
   .zee-input:focus-visible {
     border-color: var(--app-accent);
-    box-shadow:
-      0 0 0 1px rgba(0, 0, 0, 0.04),
-      0 0 0 4px rgba(248, 153, 72, 0.18);
-    transform: translateY(-1px);
-  }
-
-  .zee-input:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+    box-shadow: 0 0 0 4px var(--app-accent-soft);
+    background-color: var(--app-surface);
   }
 
   .zee-btn {
     position: relative;
     border-radius: 9999px;
-    background-image: linear-gradient(135deg, #f97316, #ea580c);
-    color: #f9fafb;
-    box-shadow:
-      0 18px 45px rgba(124, 45, 18, 0.55),
-      0 0 0 1px rgba(255, 255, 255, 0.06);
-    transform-origin: center;
+    background: var(--app-accent);
+    color: white;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .zee-btn:hover:not(:disabled) {
-    box-shadow:
-      0 22px 60px rgba(124, 45, 18, 0.6),
-      0 0 0 1px rgba(255, 255, 255, 0.09);
+    background: var(--app-accent-strong);
     transform: translateY(-1px);
+    box-shadow: 0 8px 20px -4px rgba(249, 115, 22, 0.5);
   }
-
+  
   .zee-btn:active:not(:disabled) {
     transform: translateY(0);
-    box-shadow:
-      0 12px 30px rgba(124, 45, 18, 0.5),
-      0 0 0 1px rgba(255, 255, 255, 0.06);
-  }
-
-  .zee-btn:focus-visible {
-    outline: 2px solid rgba(248, 153, 72, 0.45);
-    outline-offset: 2px;
-  }
-
-  .zee-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-
-  .text-zeel-muted {
-    color: var(--app-text-muted);
-  }
-
-  .text-zeel-primary {
-    color: var(--app-accent-strong);
   }
 }

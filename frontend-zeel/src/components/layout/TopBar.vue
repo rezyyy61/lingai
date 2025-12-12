@@ -50,6 +50,7 @@ onBeforeUnmount(() => {
     class="flex items-center justify-between rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/95 px-4 py-3 shadow-sm backdrop-blur-sm dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/95 dark:shadow-[0_18px_45px_rgba(0,0,0,0.7)]"
   >
     <div class="flex items-center gap-3">
+      <!-- Sidebar Toggle (Desktop only in this context, unless specified) -->
       <button
         class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-slate-600 transition hover:border-[var(--app-border)] hover:bg-[var(--app-surface)] dark:text-slate-200 dark:hover:border-[var(--app-border-dark)] dark:hover:bg-[var(--app-surface-dark)] lg:hidden"
         aria-label="Toggle sidebar"
@@ -60,13 +61,14 @@ onBeforeUnmount(() => {
         </svg>
       </button>
 
+      <!-- Brand / Logo Area -->
       <div class="flex items-center gap-2">
         <span
           class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--app-accent)] text-xs font-semibold uppercase tracking-wide text-white"
         >
           SS
         </span>
-        <div class="leading-tight">
+        <div class="hidden leading-tight sm:block">
           <p class="text-sm font-semibold text-slate-900 dark:text-slate-50">
             Shadowing Studio
           </p>
@@ -77,6 +79,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- Actions -->
     <div class="flex items-center gap-3">
       <button
         class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/90 text-slate-600 transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent-strong)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/90 dark:text-slate-200"
@@ -113,6 +116,7 @@ onBeforeUnmount(() => {
         </svg>
       </button>
 
+      <!-- User Menu -->
       <div class="relative" data-user-menu>
         <button
           class="flex items-center gap-3 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/95 px-3 py-1.5 text-sm text-slate-700 shadow-sm transition hover:border-[var(--app-accent)] hover:bg-[var(--app-surface)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/95 dark:text-slate-100 dark:hover:border-[var(--app-accent-strong)] dark:hover:bg-[var(--app-surface-dark-elevated)]"
@@ -129,14 +133,14 @@ onBeforeUnmount(() => {
             </p>
             <p>{{ userEmail }}</p>
           </div>
-          <svg class="h-4 w-4 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <svg class="hidden h-4 w-4 text-slate-400 dark:text-slate-500 sm:block" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
           </svg>
         </button>
 
         <div
           v-if="userMenuOpen"
-          class="absolute right-0 mt-2 w-44 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/95 p-2 text-sm shadow-lg ring-1 ring-black/5 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/95"
+          class="absolute right-0 mt-2 w-44 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/95 p-2 text-sm shadow-lg ring-1 ring-black/5 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/95 z-50"
         >
           <button
             class="w-full rounded-xl px-3 py-2 text-left text-slate-700 transition hover:bg-[var(--app-surface)] dark:text-slate-100 dark:hover:bg-[var(--app-surface-dark)]"

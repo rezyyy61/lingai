@@ -9,7 +9,7 @@ import { RouterView } from 'vue-router'
       <div class="absolute -top-40 right-[-10%] h-72 w-72 rounded-full bg-orange-400/20 blur-[120px]"></div>
       <div class="absolute bottom-[-20%] left-[-5%] h-96 w-96 rounded-full bg-emerald-400/18 blur-[150px]"></div>
     </div>
-    <div class="relative z-10 flex min-h-screen items-center px-5 py-12">
+    <div class="relative z-10 flex min-h-screen items-center px-4 py-6 sm:px-5 sm:py-12">
       <div class="mx-auto grid w-full max-w-6xl gap-12 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:items-center">
         <section class="space-y-6 text-center md:text-left">
           <p class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.5em] text-zeel-muted">

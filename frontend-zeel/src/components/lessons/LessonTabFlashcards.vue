@@ -31,9 +31,11 @@ const progressPercent = computed(() =>
 
 const showGenerateModal = ref(false)
 const isGenerationPending = ref(false)
+const isGenerationTimedOut = ref(false)
 const toastMessage = ref('')
 let toastTimeout: number | null = null
 let pollingInterval: number | null = null
+let generationTimeout: number | null = null
 const isFocusMode = ref(false)
 
 const generationStorageKey = computed(
@@ -81,18 +83,44 @@ const pushToast = (message: string) => {
   }, 4000)
 }
 
-const startPolling = () => {
-  if (pollingInterval !== null) return
-  pollingInterval = window.setInterval(() => {
-    reload()
-  }, 6000)
-}
-
 const stopPolling = () => {
   if (pollingInterval !== null) {
     clearInterval(pollingInterval)
     pollingInterval = null
   }
+  if (generationTimeout !== null) {
+    clearTimeout(generationTimeout)
+    generationTimeout = null
+  }
+}
+
+const handleTimeout = () => {
+  stopPolling()
+  isGenerationPending.value = false
+  isGenerationTimedOut.value = true
+  persistGenerationState(false)
+}
+
+const startPolling = () => {
+  if (pollingInterval !== null) return
+  
+  isGenerationTimedOut.value = false // Reset timeout state
+  
+  // Set safety timeout (40 seconds)
+  if (generationTimeout === null) {
+      generationTimeout = window.setTimeout(handleTimeout, 40000)
+  }
+
+  pollingInterval = window.setInterval(() => {
+    reload()
+  }, 4000) // Slightly faster polling
+}
+
+const manualReload = () => {
+    isGenerationTimedOut.value = false
+    isGenerationPending.value = true
+    startPolling()
+    reload()
 }
 
 const handleGenerationQueued = () => {
@@ -101,15 +129,16 @@ const handleGenerationQueued = () => {
     isGenerationPending.value = true
     startPolling()
   }
-  pushToast('Flashcard generation queued')
+  pushToast('Vocabulary extraction started')
 }
 
 watch(isReady, (ready) => {
   if (ready) {
     if (isGenerationPending.value) {
-      pushToast('Flashcards are ready')
+      pushToast('Vocabulary is ready')
     }
     isGenerationPending.value = false
+    isGenerationTimedOut.value = false
     persistGenerationState(false)
     stopPolling()
   }
@@ -147,39 +176,39 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
     <!-- Minimal header (hidden in focus mode) -->
     <div
       v-if="!isFocusMode"
-      class="flex items-center justify-between gap-3"
+      class="flex items-center justify-between gap-3 px-1"
     >
       <div class="space-y-0.5">
-        <p class="text-xs font-semibold">
+        <p class="text-xs font-semibold font-display tracking-wide uppercase text-[var(--app-accent)]">
           Flashcards
         </p>
-        <p class="text-[11px] text-[var(--app-text-muted)]">
-          Based on this lesson’s vocabulary
+        <p class="text-[11px] text-[var(--app-text-muted)] hidden sm:block">
+          Key vocabulary from this lesson
         </p>
       </div>
       <div class="flex items-center gap-2 text-[11px] text-[var(--app-text-muted)]">
         <span
           v-if="total"
-          class="hidden rounded-full border border-[var(--app-border)] px-2 py-1 sm:inline-flex"
+          class="rounded-full bg-[var(--app-surface-elevated)] border border-[var(--app-border)] px-2.5 py-1 font-medium"
         >
           {{ reviewed }} / {{ total }}
         </span>
         <button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[var(--app-border)]"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           :disabled="isGenerationPending"
           @click="openGenerateModal"
         >
-          <span class="text-xs">AI</span>
+          <span class="text-[10px] font-bold">AI</span>
         </button>
         <button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[var(--app-border)]"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           :disabled="!isReady || !currentCard"
           @click="isFocusMode = true"
         >
           <Icon
-            icon="solar:fullscreen-bold-duotone"
+            icon="solar:maximize-square-minimalistic-bold-duotone"
             class="h-4 w-4"
           />
         </button>
@@ -189,100 +218,106 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
     <!-- Toast (hidden in focus mode) -->
     <div
       v-if="toastMessage && !isFocusMode"
-      class="mt-4 rounded-full border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-2 text-center text-xs text-[var(--app-text)]"
+      class="mt-4 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-2 text-center text-xs font-medium text-[var(--app-text)] shadow-sm"
     >
       {{ toastMessage }}
     </div>
 
-    <div class="mt-4 flex flex-1 flex-col items-center justify-center gap-8">
-      <div v-if="isError" class="flex flex-col items-center gap-3 text-sm text-[var(--app-accent-strong)]">
-        <p>Something went wrong while loading flashcards.</p>
-        <button
-          class="rounded-full border border-[var(--app-accent-strong)] px-5 py-2 text-xs font-semibold text-[var(--app-accent-strong)]"
-          @click="reload"
-        >
-          Try again
-        </button>
-      </div>
-
-      <div v-if="isGenerationPending" class="w-full">
-        <Transition name="fade-scale" mode="out-in">
-          <div
-            key="generating"
-            class="flex flex-col items-center gap-4 text-sm text-[var(--app-text-muted)]"
+    <div class="mt-4 flex flex-1 flex-col items-center justify-center gap-6 sm:gap-8 relative">
+      <Transition name="fade-scale" mode="out-in">
+        <div v-if="isError" class="flex flex-col items-center gap-3 text-sm text-red-500" key="error">
+          <p>Something went wrong loading flashcards.</p>
+          <button
+            class="rounded-full border border-current px-5 py-2 text-xs font-semibold"
+            @click="reload"
           >
-            <span class="flex items-center gap-3 text-[var(--app-text)]">
-              <svg class="h-4 w-4 animate-spin text-[var(--app-accent)]" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" />
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 0 1 8-8v3.5a4.5 4.5 0 0 0-4.5 4.5H4Z"
-                />
-              </svg>
-              Generating flashcards… This may take a moment.
-            </span>
-            <button
-              class="rounded-full border border-[var(--app-border)] px-4 py-1 text-xs text-[var(--app-text)] transition hover:text-[var(--app-accent-strong)]"
-              @click="reload"
-            >
-              Check again
-            </button>
-          </div>
-        </Transition>
-      </div>
-
-      <div
-        v-else-if="isLoading && !isReady && !isEmpty"
-        class="flex w-full max-w-sm flex-col gap-4 sm:max-w-md"
-      >
-        <div class="w-full aspect-[3/4] animate-pulse rounded-3xl bg-[var(--app-panel-muted)]" />
-        <div class="mx-auto flex gap-4">
-          <div class="h-10 w-10 animate-pulse rounded-full bg-[var(--app-panel-muted)]" />
-          <div class="h-10 w-10 animate-pulse rounded-full bg-[var(--app-panel-muted)]" />
+            Try again
+          </button>
         </div>
-      </div>
 
-      <div
-        v-else-if="emptyStateVisible"
-        class="flex flex-col items-center justify-center gap-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-6 py-8 text-center text-sm text-[var(--app-text-muted)]"
-      >
-        <p class="text-base text-[var(--app-text)]">No flashcards for this lesson yet.</p>
-        <p class="text-xs text-[var(--app-text-muted)]">
-          Generate a set of key vocabulary to start practicing.
-        </p>
-        <button
-          class="rounded-full bg-[var(--app-accent)] px-6 py-2 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(249,115,22,0.3)] transition hover:bg-[var(--app-accent-strong)]"
-          @click="openGenerateModal"
+        <div v-else-if="isGenerationPending" class="w-full" key="generating">
+           <div
+             class="flex flex-col items-center gap-4 text-sm text-[var(--app-text-muted)]"
+           >
+             <span class="flex items-center gap-3 text-[var(--app-text)]">
+               <Icon icon="svg-spinners:90-ring-with-bg" class="h-5 w-5 text-[var(--app-accent)]" />
+               Extracting key vocabulary…
+             </span>
+             <p class="text-xs opacity-70">This usually takes about 20 seconds.</p>
+           </div>
+        </div>
+        
+        <div v-else-if="isGenerationTimedOut" class="w-full" key="timeout">
+            <div class="flex flex-col items-center justify-center gap-4 py-8 text-center bg-[var(--app-surface-elevated)]/40 rounded-3xl border border-[var(--app-border)]/50 border-dashed">
+                <div class="h-10 w-10 rounded-full bg-[var(--app-surface-elevated)] flex items-center justify-center text-[var(--app-text-muted)]">
+                    <Icon icon="solar:hourglass-line-bold-duotone" class="h-6 w-6" />
+                </div>
+                <div class="space-y-1 max-w-[280px]">
+                    <p class="text-sm font-medium text-[var(--app-text)]">Vocabulary isn’t ready yet</p>
+                    <p class="text-xs text-[var(--app-text-muted)]">The analysis is taking longer than expected. Please try again in a moment.</p>
+                </div>
+                <button
+                    class="mt-2 text-xs font-semibold text-[var(--app-accent)] uppercase tracking-wider hover:text-[var(--app-accent-strong)] transition"
+                    @click="manualReload"
+                >
+                    check again
+                </button>
+            </div>
+        </div>
+
+        <div
+          v-else-if="isLoading && !isReady && !isEmpty"
+          class="flex w-full max-w-sm flex-col gap-4 sm:max-w-md"
+          key="loading"
         >
-          Generate flashcards
-        </button>
-      </div>
+          <div class="w-full aspect-[3/4] animate-pulse rounded-[32px] bg-[var(--app-surface-elevated)] border border-[var(--app-border)]" />
+        </div>
 
-      <div
-        v-else-if="isReady && currentCard"
-        class="relative flex w-full flex-1 flex-col items-center justify-center"
-      >
-        <!-- exit focus button -->
-        <button
-          v-if="isFocusMode"
-          type="button"
-          class="absolute left-0 top-0 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm dark:border-[var(--app-border)]"
-          @click="isFocusMode = false"
+        <div
+          v-else-if="emptyStateVisible"
+          class="flex flex-col items-center justify-center gap-5 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/50 px-6 py-10 text-center text-sm"
+          key="empty"
         >
-          <Icon
-            icon="solar:arrow-left-linear"
-            class="h-4 w-4"
-          />
-        </button>
+          <div class="rounded-full bg-[var(--app-surface-elevated)] p-4 text-[var(--app-accent)] ring-1 ring-[var(--app-border)]">
+            <Icon icon="solar:card-2-bold-duotone" class="h-8 w-8" />
+          </div>
+          <div class="space-y-1">
+            <p class="text-base font-semibold text-[var(--app-text)]">No flashcards yet</p>
+            <p class="text-xs text-[var(--app-text-muted)] max-w-[200px] mx-auto leading-relaxed">
+              Generate a fresh set of vocabulary cards for this lesson.
+            </p>
+          </div>
+          <button
+            class="rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/30 transition active:scale-95"
+            @click="openGenerateModal"
+          >
+            Generate deck
+          </button>
+        </div>
 
-        <Transition name="fade-scale" mode="out-in">
+        <div
+          v-else-if="isReady && currentCard"
+          class="relative flex w-full flex-1 flex-col items-center justify-center"
+          key="active"
+        >
+          <!-- exit focus button -->
+          <button
+            v-if="isFocusMode"
+            type="button"
+            class="absolute left-0 top-0 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm backdrop-blur-md"
+            @click="isFocusMode = false"
+          >
+            <Icon
+              icon="solar:minimize-square-minimalistic-bold-duotone"
+              class="h-4 w-4"
+            />
+          </button>
+
           <div
-            key="flashcards"
             class="flex h-full w-full flex-col items-center justify-center gap-6"
           >
             <div class="flex w-full flex-1 items-center justify-center">
-              <div class="w-full max-w-sm sm:max-w-md">
+              <div class="w-full max-w-[320px] sm:max-w-md">
                 <Flashcard
                   :key="currentCard.id"
                   :wordId="currentCard.id"
@@ -299,40 +334,44 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
             <!-- navigation hidden in focus mode to keep only card visible -->
             <div
               v-if="!isFocusMode"
-              class="mt-4 flex w-full items-center justify-center gap-10 text-xs text-[var(--app-text-muted)]"
+              class="flex w-full max-w-[320px] sm:max-w-md items-center justify-between gap-4"
             >
               <button
                 type="button"
-                class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:opacity-30"
+                class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
                 :disabled="!hasPrev"
                 @click="goPrev"
               >
-                <span class="text-base">←</span>
+                <Icon icon="solar:arrow-left-linear" class="h-6 w-6" />
               </button>
 
-              <span class="text-[11px] font-semibold">
-                {{ reviewed }} / {{ total }}
-              </span>
+              <div class="flex flex-col items-center">
+                <span class="text-xs font-semibold text-[var(--app-text)]">
+                  {{ reviewed }} / {{ total }}
+                </span>
+                <span class="text-[10px] text-[var(--app-text-muted)]">Cards</span>
+              </div>
 
               <button
                 type="button"
-                class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:opacity-30"
+                class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
                 :disabled="!hasNext"
                 @click="goNext"
               >
-                <span class="text-base">→</span>
+                <Icon icon="solar:arrow-right-linear" class="h-6 w-6" />
               </button>
             </div>
           </div>
-        </Transition>
-      </div>
+        </div>
 
-      <div
-        v-else-if="isReady && !currentCard"
-        class="flex flex-col items-center justify-center gap-3 text-sm text-[var(--app-text-muted)]"
-      >
-        <p>You have reviewed all flashcards for this lesson.</p>
-      </div>
+        <div
+          v-else-if="isReady && !currentCard"
+          class="flex flex-col items-center justify-center gap-3 text-sm text-[var(--app-text-muted)]"
+          key="done"
+        >
+          <p>You have reviewed all flashcards for this lesson.</p>
+        </div>
+      </Transition>
     </div>
 
     <GenerateFlashcardsModal

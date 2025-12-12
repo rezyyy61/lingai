@@ -198,48 +198,45 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
 
 <template>
   <section
-    class="flex h-full w-full max-w-full flex-col overflow-x-hidden text-[var(--app-text)] dark:text-white"
+    class="flex h-full w-full max-w-full flex-col overflow-x-hidden text-[var(--app-text)]"
   >
     <!-- Header (hidden in focus mode) -->
     <div
       v-if="!isFocusMode"
-      class="flex w-full flex-wrap items-center justify-between gap-3"
+      class="flex w-full flex-wrap items-center justify-between gap-3 px-1"
     >
-      <div class="space-y-1">
+      <div class="space-y-0.5">
         <p
-          class="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--app-text-muted)] dark:text-white/60"
+          class="text-xs font-semibold font-display tracking-wider uppercase text-[var(--app-accent)]"
         >
           Shadowing
         </p>
-        <p class="text-sm text-[var(--app-text-muted)] dark:text-white/60">
-          Listen and repeat each sentence several times
+        <p class="text-[11px] text-[var(--app-text-muted)] hidden sm:block">
+          Listen and repeat each sentence
         </p>
       </div>
       <div
-        class="flex w-full flex-wrap items-center gap-2 text-xs text-[var(--app-text-muted)] sm:w-auto sm:justify-end dark:text-white/60"
+        class="flex items-center gap-2 text-xs text-[var(--app-text-muted)]"
       >
-        <span class="rounded-full border border-[var(--app-border)] px-3 py-1 dark:border-white/15">
-          Sentence: {{ progressLabel }}
-        </span>
-        <span class="rounded-full border border-[var(--app-border)] px-3 py-1 dark:border-white/15">
-          Total: {{ total }}
+        <span class="rounded-full bg-[var(--app-surface-elevated)] border border-[var(--app-border)] px-3 py-1 font-medium">
+          {{ progressLabel }}
         </span>
         <button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           :disabled="isGenerationPending"
           @click="openGenerateModal"
         >
-          <span class="text-[11px]">AI</span>
+          <span class="text-[10px] font-bold">AI</span>
         </button>
         <button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:bg-[var(--app-panel-muted)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           :disabled="!isReady || !activeSentence"
           @click="isFocusMode = true"
         >
           <Icon
-            icon="solar:fullscreen-bold-duotone"
+            icon="solar:maximize-square-minimalistic-bold-duotone"
             class="h-4 w-4"
           />
         </button>
@@ -249,228 +246,235 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
     <!-- Progress & toast (hidden in focus mode) -->
     <div
       v-if="!isFocusMode"
-      class="mt-3 h-2 w-full max-w-full overflow-hidden rounded-full bg-[var(--app-panel-muted)] dark:bg-white/10"
+      class="mt-4 h-1.5 w-full max-w-full overflow-hidden rounded-full bg-[var(--app-panel-muted)]"
     >
       <div
-        class="h-full rounded-full bg-[var(--app-accent-secondary)] transition-all duration-300"
+        class="h-full rounded-full bg-[var(--app-accent)] transition-all duration-300"
         :style="{ width: progressPercent + '%' }"
       />
     </div>
 
     <div
       v-if="toastMessage && !isFocusMode"
-      class="mt-4 w-full max-w-full rounded-full border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-2 text-center text-xs text-[var(--app-text)] dark:border-white/10 dark:bg-white/5 dark:text-white/80"
+      class="mt-4 w-full max-w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-2 text-center text-xs font-medium text-[var(--app-text)] shadow-sm"
     >
       {{ toastMessage }}
     </div>
 
     <div
-      class="mt-6 flex w-full max-w-full flex-1 flex-col items-center justify-center gap-8 overflow-x-hidden px-1 sm:px-0"
+      class="mt-6 flex w-full max-w-full flex-1 flex-col items-center justify-center gap-6 overflow-x-hidden px-1 sm:px-0 relative"
     >
-      <div
-        v-if="isError"
-        class="flex w-full max-w-full flex-col items-center gap-3 px-4 text-sm text-[var(--app-accent-strong)]"
-      >
-        <p>Could not load shadowing sentences.</p>
-        <button
-          class="rounded-full border border-[var(--app-accent-strong)] px-4 py-1.5 text-xs font-medium text-[var(--app-accent-strong)]"
-          @click="reload"
-        >
-          Try again
-        </button>
-      </div>
-
-      <div v-if="isGenerationPending" class="w-full max-w-full">
-        <Transition name="fade-scale" mode="out-in">
-          <div
-            key="shadowing-generating"
-            class="flex flex-col items-center gap-4 text-sm text-[var(--app-text-muted)] dark:text-white/70"
-          >
-            <span class="flex items-center gap-3 text-[var(--app-text)] dark:text-white">
-              <svg
-                class="h-4 w-4 animate-spin text-[var(--app-accent)]"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  fill="none"
-                />
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 0 1 8-8v3.5a4.5 4.5 0 0 0-4.5 4.5H4Z"
-                />
-              </svg>
-              Generating shadowing sentences… This may take a moment.
-            </span>
-            <button
-              class="rounded-full border border-[var(--app-border)] px-4 py-1 text-xs text-[var(--app-text)] transition hover:text-[var(--app-accent-strong)] dark:border-white/15 dark:text-white/80 dark:hover:text-white"
-              @click="reload"
-            >
-              Check again
-            </button>
-          </div>
-        </Transition>
-      </div>
-
-      <div
-        v-else-if="isLoading && !isReady && !isEmpty"
-        class="flex w-full max-w-sm flex-col items-center gap-4 sm:max-w-md"
-      >
+      <Transition name="fade-scale" mode="out-in">
         <div
-          class="aspect-[3/4] w-full animate-pulse rounded-3xl bg-[var(--app-panel-muted)] dark:bg-[var(--app-surface-dark)]/80"
-        />
-        <div class="mx-auto flex gap-4">
-          <div
-            class="h-10 w-10 animate-pulse rounded-full bg-[var(--app-panel-muted)] dark:bg-[var(--app-surface-dark)]/80"
-          />
-          <div
-            class="h-10 w-10 animate-pulse rounded-full bg-[var(--app-panel-muted)] dark:bg-[var(--app-surface-dark)]/80"
-          />
-        </div>
-      </div>
-
-      <div
-        v-else-if="emptyStateVisible"
-        class="flex w-full max-w-full flex-col items-center justify-center gap-4 rounded-[20px] border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-10 text-center text-sm text-[var(--app-text-muted)] sm:px-6 dark:border-white/10 dark:bg-white/5 dark:text-white/70"
-      >
-        <p class="text-base text-[var(--app-text)] dark:text-white">
-          No shadowing sentences for this lesson yet.
-        </p>
-        <p class="text-xs text-[var(--app-text-muted)] dark:text-white/60">
-          Generate AI-powered sentences to start shadowing practice.
-        </p>
-        <button
-          class="rounded-full bg-[var(--app-accent)] px-6 py-2 text-sm font-semibold text-white shadow-[0_15px_30px_rgba(249,115,22,0.3)] transition hover:bg-[var(--app-accent-strong)]"
-          @click="openGenerateModal"
+          v-if="isError"
+          class="flex w-full max-w-full flex-col items-center gap-3 px-4 text-sm text-[var(--app-accent-strong)]"
+          key="error"
         >
-          Generate shadowing sentences
-        </button>
-      </div>
-
-      <div v-else-if="isReady && activeSentence" class="w-full max-w-full px-1">
-        <Transition name="fade-scale" mode="out-in">
-          <div
-            key="shadowing-ready"
-            class="relative mx-auto flex h-full w-full max-w-sm flex-col justify-center rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-5 text-[var(--app-text)] shadow-md sm:max-w-md sm:px-6 sm:py-6 dark:border-[var(--app-border-dark)] dark:bg-[#202124] dark:text-white"
+          <p>Could not load shadowing sentences.</p>
+          <button
+            class="rounded-full border border-[var(--app-accent-strong)] px-4 py-1.5 text-xs font-medium text-[var(--app-accent-strong)]"
+            @click="reload"
           >
-            <!-- exit focus -->
-            <button
-              v-if="isFocusMode"
-              type="button"
-              class="absolute left-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)]/80 text-[var(--app-text)] shadow-sm dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
-              @click="isFocusMode = false"
-            >
-              <Icon
-                icon="solar:arrow-left-linear"
-                class="h-4 w-4"
-              />
-            </button>
+            Try again
+          </button>
+        </div>
 
-            <!-- top controls (hidden in focus mode to keep card clean) -->
+        <div v-else-if="isGenerationPending" class="w-full max-w-full" key="generating">
+           <div
+             class="flex flex-col items-center gap-4 text-sm text-[var(--app-text-muted)]"
+           >
+             <span class="flex items-center gap-3 text-[var(--app-text)]">
+               <Icon icon="svg-spinners:90-ring-with-bg" class="h-5 w-5 text-[var(--app-accent)]" />
+               Generating sentences...
+             </span>
+             <button
+               class="rounded-full border border-[var(--app-border)] px-4 py-1.5 text-xs font-medium text-[var(--app-text-muted)] transition hover:text-[var(--app-text)]"
+               @click="reload"
+             >
+               Check status
+             </button>
+           </div>
+        </div>
+
+        <div
+          v-else-if="isLoading && !isReady && !isEmpty"
+          class="flex w-full max-w-sm flex-col items-center gap-4 sm:max-w-md"
+          key="loading"
+        >
+          <div
+            class="aspect-[3/4] w-full animate-pulse rounded-[32px] bg-[var(--app-surface-elevated)] border border-[var(--app-border)]"
+          />
+          <div class="mx-auto flex gap-4">
             <div
-              v-if="!isFocusMode"
-              class="mb-4 flex items-center justify-between text-[11px] text-[var(--app-text-muted)] dark:text-white/60"
-            >
-              <span>Shadowing card</span>
-              <span>#{{ activeSentence.orderIndex }} / {{ total }}</span>
-            </div>
-
-            <div class="flex flex-1 flex-col items-center justify-center gap-4">
-              <div class="space-y-2 text-center">
-                <p class="px-1 text-base leading-relaxed sm:text-lg md:text-xl">
-                  {{ activeSentence.text }}
-                </p>
-                <p
-                  v-if="showTranslation && activeSentence.translation"
-                  class="px-1 text-xs leading-relaxed text-[var(--app-text-muted)] sm:text-sm dark:text-white/70"
-                >
-                  {{ activeSentence.translation }}
-                </p>
-              </div>
-
-              <div
-                class="mt-2 flex flex-col items-center gap-2 text-[11px] text-[var(--app-text-muted)] sm:flex-row sm:justify-center sm:gap-3 dark:text-white/60"
-              >
-                <div
-                  class="flex items-center gap-1 rounded-full bg-[var(--app-surface)]/60 px-2 py-1 dark:bg-black/20"
-                >
-                  <button
-                    v-for="rate in playbackRateOptions"
-                    :key="rate"
-                    type="button"
-                    class="rounded-full px-2 py-0.5 text-[10px] transition"
-                    :class="
-                      playbackRate === rate
-                        ? 'bg-[var(--app-accent-secondary)] text-white'
-                        : 'text-[var(--app-text-muted)] hover:bg-[var(--app-surface-elevated)] dark:text-white/60 dark:hover:bg-[var(--app-surface-dark)]'
-                    "
-                    @click.stop="setRate(rate)"
-                  >
-                    {{ rate }}x
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-full bg-[var(--app-accent-secondary)] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40 dark:text-[var(--app-surface-dark)]"
-                  :disabled="isAudioLoading"
-                  @click.stop="handlePlayClick"
-                >
-                  <span v-if="isAudioLoading">Loading…</span>
-                  <span v-else-if="isAudioPlaying">Pause</span>
-                  <span v-else>Play</span>
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1 text-[11px] text-[var(--app-text)] disabled:opacity-40 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-white"
-                  :disabled="!activeSentence.translation"
-                  @click.stop="showTranslation = !showTranslation"
-                >
-                  <span v-if="showTranslation">Hide translation</span>
-                  <span v-else>Show translation</span>
-                </button>
-              </div>
-
-              <div
-                v-if="!isFocusMode"
-                class="mt-4 flex w-full items-center justify-center gap-10 text-[11px] text-[var(--app-text-muted)] dark:text-white/60"
-              >
-                <button
-                  type="button"
-                  class="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] disabled:opacity-30 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
-                  :disabled="!hasPrev"
-                  @click.stop="goPrev"
-                >
-                  ←
-                </button>
-                <span class="text-[11px] font-semibold">
-                  {{ progressLabel }}
-                </span>
-                <button
-                  type="button"
-                  class="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] disabled:opacity-30 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
-                  :disabled="!hasNext"
-                  @click.stop="goNext"
-                >
-                  →
-                </button>
-              </div>
-            </div>
+              class="h-12 w-12 animate-pulse rounded-full bg-[var(--app-surface-elevated)]"
+            />
           </div>
-        </Transition>
-      </div>
+        </div>
 
-      <div
-        v-else-if="isReady && !activeSentence"
-        class="flex h-full w-full max-w-full items-center justify-center rounded-3xl border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-6 text-sm text-[var(--app-text-muted)] shadow-[var(--app-card-shadow)] sm:px-6 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)] dark:text-white/70 dark:shadow-2xl"
-      >
-        No active sentence.
-      </div>
+        <div
+          v-else-if="emptyStateVisible"
+          class="flex w-full max-w-full flex-col items-center justify-center gap-5 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/50 px-6 py-10 text-center text-sm"
+          key="empty"
+        >
+          <div class="rounded-full bg-[var(--app-surface-elevated)] p-4 text-[var(--app-accent)] ring-1 ring-[var(--app-border)]">
+            <Icon icon="solar:microphone-3-bold-duotone" class="h-8 w-8" />
+          </div>
+          <div class="space-y-1">
+            <p class="text-base font-semibold text-[var(--app-text)]">
+              No shadowing sentences
+            </p>
+            <p class="text-xs text-[var(--app-text-muted)] max-w-[200px] mx-auto leading-relaxed">
+              Generate AI-powered sentences to start practicing pronunciation.
+            </p>
+          </div>
+          <button
+            class="rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/30 transition active:scale-95"
+            @click="openGenerateModal"
+          >
+            Generate exercises
+          </button>
+        </div>
+
+        <div v-else-if="isReady && activeSentence" class="w-full max-w-full px-1" key="active">
+           <div
+             class="relative mx-auto flex h-full w-full max-w-sm flex-col justify-center rounded-[32px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-5 py-6 text-[var(--app-text)] shadow-sm sm:max-w-md sm:px-8 sm:py-8 dark:border-white/5"
+           >
+             <!-- exit focus -->
+             <button
+               v-if="isFocusMode"
+               type="button"
+               class="absolute left-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm backdrop-blur-md"
+               @click="isFocusMode = false"
+             >
+               <Icon
+                 icon="solar:minimize-square-minimalistic-bold-duotone"
+                 class="h-4 w-4"
+               />
+             </button>
+
+             <!-- top controls (hidden in focus mode to keep card clean) -->
+             <div
+               v-if="!isFocusMode"
+               class="mb-6 flex items-center justify-center"
+             >
+               <span class="rounded-full bg-[var(--app-surface)] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--app-text-muted)]">
+                 Sentence {{ activeSentence.orderIndex }} / {{ total }}
+               </span>
+             </div>
+
+             <div class="flex flex-1 flex-col items-center justify-center gap-6 sm:gap-8">
+               <div class="space-y-4 text-center w-full">
+                 <p class="font-display text-2xl font-semibold leading-relaxed sm:text-3xl">
+                   {{ activeSentence.text }}
+                 </p>
+                 <div class="h-px w-12 mx-auto bg-[var(--app-border)]"></div>
+                 
+                 <div class="min-h-[3rem]">
+                   <p
+                     v-if="showTranslation && activeSentence.translation"
+                     class="text-sm leading-relaxed text-[var(--app-text-muted)] font-medium"
+                   >
+                     {{ activeSentence.translation }}
+                   </p>
+                   <button
+                      v-else
+                      @click="showTranslation = true"
+                      class="text-xs text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition underline underline-offset-4 decoration-[var(--app-border)]"
+                   >
+                     Show translation
+                   </button>
+                 </div>
+               </div>
+
+               <div class="w-full space-y-4">
+                 <!-- Play Controls -->
+                 <div class="flex items-center justify-center gap-4"> 
+                    <button
+                     type="button"
+                     class="group relative flex h-16 w-16 items-center justify-center rounded-full bg-[var(--app-accent)] text-white shadow-xl shadow-[var(--app-accent)]/20 transition active:scale-95 disabled:opacity-70"
+                     :disabled="isAudioLoading"
+                     @click.stop="handlePlayClick"
+                   >
+                     <Icon
+                        v-if="!isAudioLoading && !isAudioPlaying"
+                        icon="solar:play-bold"
+                        class="h-8 w-8 ml-1"
+                     />
+                      <Icon
+                        v-else-if="isAudioPlaying"
+                        icon="solar:pause-bold"
+                        class="h-8 w-8"
+                     />
+                      <Icon
+                        v-else
+                        icon="svg-spinners:90-ring-with-bg"
+                        class="h-8 w-8 text-white/80"
+                     />
+                   </button>
+                 </div>
+
+                 <!-- Secondary Controls -->
+                  <div
+                   class="flex items-center justify-center gap-2"
+                 >
+                   <div class="flex items-center rounded-full bg-[var(--app-surface)] p-1 border border-[var(--app-border)]">
+                     <button
+                       v-for="rate in playbackRateOptions"
+                       :key="rate"
+                       type="button"
+                       class="rounded-full px-3 py-1.5 text-[11px] font-medium transition"
+                       :class="
+                         playbackRate === rate
+                           ? 'bg-[var(--app-surface-elevated)] text-[var(--app-accent)] shadow-sm font-bold'
+                           : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'
+                       "
+                       @click.stop="setRate(rate)"
+                     >
+                       {{ rate }}x
+                     </button>
+                   </div>
+                 </div>
+               </div>
+
+               <!-- Navigation -->
+               <div
+                 v-if="!isFocusMode"
+                 class="flex w-full items-center justify-between gap-4 mt-2"
+               >
+                 <button
+                   type="button"
+                   class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+                   :disabled="!hasPrev"
+                   @click.stop="goPrev"
+                 >
+                   <Icon icon="solar:arrow-left-linear" class="h-6 w-6" />
+                 </button>
+                 
+                 <span class="text-[10px] font-medium text-[var(--app-text-muted)] uppercase tracking-widest">
+                    Navigate
+                 </span>
+
+                 <button
+                   type="button"
+                   class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+                   :disabled="!hasNext"
+                   @click.stop="goNext"
+                 >
+                    <Icon icon="solar:arrow-right-linear" class="h-6 w-6" />
+                 </button>
+               </div>
+             </div>
+           </div>
+        </div>
+
+        <div
+          v-else-if="isReady && !activeSentence"
+          class="flex h-full w-full max-w-full items-center justify-center rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-6 text-sm text-[var(--app-text-muted)]"
+          key="done"
+        >
+          No active sentence.
+        </div>
+      </Transition>
     </div>
 
     <GenerateShadowingModal

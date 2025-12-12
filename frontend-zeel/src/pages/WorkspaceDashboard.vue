@@ -101,12 +101,12 @@ onMounted(() => {
       />
 
       <main class="mt-8 flex flex-1 flex-col">
-        <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p class="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400 dark:text-slate-500">
+            <p class="hidden text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400 dark:text-slate-500 sm:block">
               SHADOWING STUDIO
             </p>
-            <h1 class="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 sm:text-2xl">
+            <h1 class="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 sm:mt-1 sm:text-2xl">
               My workspaces
             </h1>
           </div>
@@ -114,31 +114,33 @@ onMounted(() => {
           <div class="flex flex-wrap items-center gap-3">
             <!-- Grid / List toggle -->
             <div
-              class="flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-1 py-0.5 text-[11px] text-slate-500 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-300"
+              class="flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-0.5 text-[11px] text-slate-500 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-300"
             >
               <button
                 type="button"
                 :class="[
-                  'rounded-full px-3 py-1 transition',
+                  'rounded-full px-3 py-1.5 transition',
                   viewMode === 'grid'
-                    ? 'bg-slate-900/5 text-slate-900 dark:bg-slate-50/10 dark:text-slate-50'
+                    ? 'bg-[var(--app-surface)] text-slate-900 shadow-sm dark:bg-[var(--app-surface-dark)] dark:text-slate-50'
                     : 'text-slate-400 dark:text-slate-500',
                 ]"
                 @click="viewMode = 'grid'"
               >
-                Grid
+                <span class="sr-only">Grid</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-layout-grid"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
               </button>
               <button
                 type="button"
                 :class="[
-                  'rounded-full px-3 py-1 transition',
+                  'rounded-full px-3 py-1.5 transition',
                   viewMode === 'list'
-                    ? 'bg-slate-900/5 text-slate-900 dark:bg-slate-50/10 dark:text-slate-50'
+                    ? 'bg-[var(--app-surface)] text-slate-900 shadow-sm dark:bg-[var(--app-surface-dark)] dark:text-slate-50'
                     : 'text-slate-400 dark:text-slate-500',
                 ]"
                 @click="viewMode = 'list'"
               >
-                List
+                <span class="sr-only">List</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
               </button>
             </div>
 
@@ -146,12 +148,12 @@ onMounted(() => {
             <div class="relative text-xs">
               <select
                 v-model="sortMode"
-                class="appearance-none rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 pr-7 text-[11px] font-medium text-slate-600 outline-none dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-200"
+                class="appearance-none rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-2 pr-8 text-[11px] font-medium text-slate-600 outline-none focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:text-slate-200"
               >
-                <option value="recent">Most recent</option>
-                <option value="name">Name A–Z</option>
+                <option value="recent">Recent</option>
+                <option value="name">Name</option>
               </select>
-              <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+              <span class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
                 <svg class="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                 </svg>
@@ -161,11 +163,11 @@ onMounted(() => {
             <!-- Create button -->
             <button
               type="button"
-              class="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] px-4 py-2 text-xs font-semibold text-white shadow-sm shadow-[var(--app-accent)]/30 transition hover:bg-[var(--app-accent-strong)]"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--app-accent)] text-white shadow-sm shadow-[var(--app-accent)]/30 transition hover:bg-[var(--app-accent-strong)] sm:w-auto sm:px-4 sm:py-2"
               @click="createModalOpen = true"
             >
-              <span class="mr-2 text-base leading-none">+</span>
-              Create new
+              <span class="text-xl leading-none sm:mr-2 sm:text-base">+</span>
+              <span class="hidden sm:inline">Create</span>
             </button>
           </div>
         </header>

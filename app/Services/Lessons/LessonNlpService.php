@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Http;
 
 class LessonNlpService
 {
+    protected int $chunkSize = 1500;
+
     public function analyzeText(
         string $text,
         string $targetLanguage = 'en',
@@ -14,11 +16,36 @@ class LessonNlpService
         LessonNlpTask $task = LessonNlpTask::FullLesson,
         ?string $customUserPrompt = null
     ): array {
+        $wordCount = str_word_count(strip_tags($text));
+
+        // If text is small enough, process directly
+        if ($wordCount <= $this->chunkSize) {
+            return $this->processChunk($text, $targetLanguage, $supportLanguage, $task, $customUserPrompt);
+        }
+
+        // Otherwise, split and process sequentially
+        $chunks = $this->chunkText($text, $this->chunkSize);
+        $results = [];
+
+        foreach ($chunks as $chunk) {
+            $results[] = $this->processChunk($chunk, $targetLanguage, $supportLanguage, $task, $customUserPrompt);
+        }
+
+        return $this->mergeResults($results);
+    }
+
+    protected function processChunk(
+        string $text,
+        string $targetLanguage,
+        string $supportLanguage,
+        LessonNlpTask $task,
+        ?string $customUserPrompt
+    ): array {
         $base = rtrim(config('services.openai.base', 'https://api.openai.com/v1'), '/');
         $endpoint = $base . '/chat/completions';
 
         $payload = [
-            'model' => config('services.openai.chat_model', 'gpt-4.1-mini'),
+            'model' => config('services.openai.chat_model', 'gpt-4'),
             'messages' => [
                 [
                     'role' => 'system',
@@ -38,19 +65,19 @@ class LessonNlpService
             'response_format' => ['type' => 'json_object'],
         ];
 
+        // Increased timeout for safety
         $response = Http::withToken(config('services.openai.key'))
-            ->timeout(60)
+            ->timeout(120) 
             ->connectTimeout(10)
             ->post($endpoint, $payload)
             ->throw()
             ->json();
 
         $content = $response['choices'][0]['message']['content'] ?? '{}';
-
         $data = json_decode($content, true);
 
         if (! is_array($data)) {
-            $data = [];
+            return [];
         }
 
         return [
@@ -58,6 +85,65 @@ class LessonNlpService
             'words' => $data['words'] ?? [],
             'exercises' => $data['exercises'] ?? [],
         ];
+    }
+
+    protected function chunkText(string $text, int $maxWords): array
+    {
+        $words = preg_split('/\s+/', trim($text));
+        $chunks = [];
+        $currentChunk = [];
+        $currentWordCount = 0;
+
+        foreach ($words as $word) {
+            $currentChunk[] = $word;
+            $currentWordCount++;
+
+            // Check if we reached the limit and it looks like a sentence end (sticky punctuation)
+            if ($currentWordCount >= $maxWords && preg_match('/[.!?]$/', $word)) {
+                $chunks[] = implode(' ', $currentChunk);
+                $currentChunk = [];
+                $currentWordCount = 0;
+            }
+        }
+
+        if (! empty($currentChunk)) {
+            $chunks[] = implode(' ', $currentChunk);
+        }
+
+        return $chunks;
+    }
+
+    protected function mergeResults(array $results): array
+    {
+        $merged = [
+            'sentences' => [],
+            'words' => [],
+            'exercises' => [],
+        ];
+
+        foreach ($results as $result) {
+            if (! empty($result['sentences'])) {
+                $merged['sentences'] = array_merge($merged['sentences'], $result['sentences']);
+            }
+            if (! empty($result['words'])) {
+                $merged['words'] = array_merge($merged['words'], $result['words']);
+            }
+            if (! empty($result['exercises'])) {
+                $merged['exercises'] = array_merge($merged['exercises'], $result['exercises']);
+            }
+        }
+
+        // Deduplicate words based on 'term'
+        $uniqueWords = [];
+        foreach ($merged['words'] as $word) {
+            $term = mb_strtolower($word['term'] ?? '');
+            if ($term && ! isset($uniqueWords[$term])) {
+                $uniqueWords[$term] = $word;
+            }
+        }
+        $merged['words'] = array_values($uniqueWords);
+
+        return $merged;
     }
 
     protected function buildPrompt(

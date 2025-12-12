@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useLessonExercises } from '@/composables/useLessonExercises'
+import { Icon } from '@iconify/vue'
 import type { LessonExerciseOption } from '@/types/lesson'
 import GenerateExercisesModal from './GenerateExercisesModal.vue'
 
@@ -215,270 +216,262 @@ const optionClasses = (option: LessonExerciseOption) => {
 </script>
 
 <template>
-  <section class="flex h-full flex-col text-[var(--app-text)] dark:text-white">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="space-y-1">
-        <p class="text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--app-text-muted)] dark:text-white/60">
+  <section class="flex h-full flex-col text-[var(--app-text)]">
+    <!-- Header -->
+    <div class="flex items-center justify-between gap-3 px-1">
+      <div class="space-y-0.5">
+        <p class="text-xs font-semibold font-display tracking-wider uppercase text-[var(--app-accent)]">
           Exercises
         </p>
-        <p class="text-sm text-[var(--app-text-muted)] dark:text-white/60">
-          Choose the correct answer and see why it is correct
+        <p class="text-[11px] text-[var(--app-text-muted)] hidden sm:block">
+          Practice your knowledge
         </p>
       </div>
-      <div class="flex flex-wrap items-center gap-3 text-xs text-[var(--app-text-muted)] dark:text-white/60">
-        <span class="rounded-full border border-[var(--app-border)] px-3 py-1 dark:border-white/15">
-          Exercise: {{ progressLabel }}
-        </span>
-        <span class="rounded-full border border-[var(--app-border)] px-3 py-1 dark:border-white/15">
-          Total: {{ total }}
+      <div class="flex items-center gap-2 text-[11px] text-[var(--app-text-muted)]">
+        <span class="rounded-full bg-[var(--app-surface-elevated)] border border-[var(--app-border)] px-2.5 py-1 font-medium">
+          {{ progressLabel }}
         </span>
         <button
           type="button"
-          class="rounded-full border border-[var(--app-border)] px-3 py-1 font-semibold text-[var(--app-text)] transition hover:bg-[var(--app-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-white/80 dark:hover:text-white"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           :disabled="isGenerationPending"
           @click="openGenerateModal"
         >
-          Generate exercises
+          <span class="text-[10px] font-bold">AI</span>
         </button>
       </div>
     </div>
 
-    <div class="mt-3 h-2 overflow-hidden rounded-full bg-[var(--app-panel-muted)] dark:bg-white/10">
+    <!-- Progress bar -->
+    <div class="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[var(--app-panel-muted)]">
       <div
-        class="h-full rounded-full bg-[var(--app-accent-secondary)] transition-all duration-300"
+        class="h-full rounded-full bg-[var(--app-accent)] transition-all duration-300"
         :style="{ width: progressPercent + '%' }"
       />
     </div>
 
+    <!-- Toast message -->
     <div
       v-if="toastMessage"
-      class="mt-4 rounded-full border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-2 text-center text-xs text-[var(--app-text)] dark:border-white/10 dark:bg-white/5 dark:text-white/80"
+      class="mt-3 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-2 text-center text-xs text-[var(--app-text)] shadow-sm"
     >
       {{ toastMessage }}
     </div>
 
-    <div class="mt-6 flex flex-wrap gap-3 text-xs text-[var(--app-text-muted)] dark:text-white/70">
-      <label class="flex flex-col gap-1">
-        <span class="text-[10px] uppercase tracking-[0.3em] text-[var(--app-text-muted)] dark:text-white/50">Skill</span>
+    <!-- Filters -->
+    <div class="mt-4 flex flex-wrap gap-2 text-xs">
+      <label class="relative">
         <select
           v-model="skillFilter"
-          class="rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1 text-xs text-[var(--app-text)] focus:border-[var(--app-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-white/15 dark:bg-white/5 dark:text-white"
+          class="appearance-none rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-elevated)] pl-3 pr-8 py-1.5 text-xs font-medium text-[var(--app-text)] focus:border-[var(--app-accent)] focus:outline-none"
         >
           <option value="">All skills</option>
           <option v-for="skill in availableSkills" :key="skill" :value="skill">
             {{ skill }}
           </option>
         </select>
+        <Icon icon="solar:alt-arrow-down-bold" class="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--app-text-muted)] pointer-events-none"/>
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-[10px] uppercase tracking-[0.3em] text-[var(--app-text-muted)] dark:text-white/50">Type</span>
+      <label class="relative">
         <select
           v-model="typeFilter"
-          class="rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1 text-xs text-[var(--app-text)] focus:border-[var(--app-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-white/15 dark:bg-white/5 dark:text-white"
+          class="appearance-none rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-elevated)] pl-3 pr-8 py-1.5 text-xs font-medium text-[var(--app-text)] focus:border-[var(--app-accent)] focus:outline-none"
         >
           <option value="">All types</option>
           <option v-for="type in availableTypes" :key="type" :value="type">
             {{ type }}
           </option>
         </select>
+        <Icon icon="solar:alt-arrow-down-bold" class="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--app-text-muted)] pointer-events-none"/>
       </label>
     </div>
 
-    <div class="mt-6 flex flex-1 flex-col items-center justify-center gap-8">
-      <div v-if="isError" class="flex flex-col items-center gap-3 text-sm text-[var(--app-accent-strong)]">
-        <p>Could not load exercises.</p>
-        <button
-          class="rounded-full border border-[var(--app-accent-strong)] px-4 py-1.5 text-xs font-medium text-[var(--app-accent-strong)]"
-          @click="reload"
-        >
-          Try again
-        </button>
-      </div>
-
-      <div v-if="isGenerationPending" class="w-full">
-        <Transition name="fade-scale" mode="out-in">
-          <div
-            key="exercises-generating"
-            class="flex flex-col items-center gap-4 text-sm text-[var(--app-text-muted)] dark:text-white/70"
+    <!-- Main Content Area -->
+    <div class="mt-4 flex flex-1 flex-col items-center justify-start pb-4 relative">
+      <Transition name="fade-scale" mode="out-in">
+        <!-- Error State -->
+        <div v-if="isError" class="w-full flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-600 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400" key="error">
+          <p class="text-xs font-medium">Could not load exercises.</p>
+          <button
+            class="rounded-full border border-current px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
+            @click="reload"
           >
-            <span class="flex items-center gap-3 text-[var(--app-text)] dark:text-white">
-              <svg class="h-4 w-4 animate-spin text-[var(--app-accent)]" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" />
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 0 1 8-8v3.5a4.5 4.5 0 0 0-4.5 4.5H4Z"
-                />
-              </svg>
-              Generating exercises for this lesson…
-            </span>
-            <button
-              class="rounded-full border border-[var(--app-border)] px-4 py-1 text-xs text-[var(--app-text)] transition hover:text-[var(--app-accent-strong)] dark:border-white/15 dark:text-white/80 dark:hover:text-white"
-              @click="reload"
-            >
-              Check again
-            </button>
-          </div>
-        </Transition>
-      </div>
-
-      <div
-        v-else-if="isLoading && !isReady && !isEmpty"
-        class="flex w-full max-w-3xl flex-col gap-4"
-      >
-        <div class="w-full aspect-[4/3] animate-pulse rounded-[32px] bg-[var(--app-panel-muted)] dark:bg-[var(--app-surface-dark)]/80" />
-        <div class="mx-auto flex gap-4">
-          <div class="h-12 w-32 animate-pulse rounded-full bg-[var(--app-panel-muted)] dark:bg-[var(--app-surface-dark)]/80" />
-          <div class="h-12 w-32 animate-pulse rounded-full bg-[var(--app-panel-muted)] dark:bg-[var(--app-surface-dark)]/80" />
+            Retry
+          </button>
         </div>
-      </div>
 
-      <div
-        v-else-if="emptyStateVisible"
-        class="flex flex-col items-center justify-center gap-4 rounded-[20px] border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-6 py-10 text-center text-sm text-[var(--app-text-muted)] dark:border-white/10 dark:bg-white/5 dark:text-white/70"
-      >
-        <p class="text-base text-[var(--app-text)] dark:text-white">No exercises for this lesson yet.</p>
-        <p class="text-xs text-[var(--app-text-muted)] dark:text-white/60">
-          Generate targeted practice items to reinforce this lesson.
-        </p>
-        <button
-          class="rounded-full bg-[var(--app-accent)] px-6 py-2 text-sm font-semibold text-white shadow-[0_15px_30px_rgba(249,115,22,0.3)] transition hover:bg-[var(--app-accent-strong)]"
-          @click="openGenerateModal"
+        <!-- Generating State -->
+        <div v-else-if="isGenerationPending" class="w-full mt-4" key="generating">
+           <div class="flex flex-col items-center gap-4 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-8 text-center shadow-sm">
+              <Icon icon="svg-spinners:90-ring-with-bg" class="h-8 w-8 text-[var(--app-accent)]" />
+              <div class="space-y-1">
+                <p class="text-sm font-medium text-[var(--app-text)]">Generating exercises...</p>
+                <p class="text-xs text-[var(--app-text-muted)]">Crafting questions based on lesson content.</p>
+              </div>
+           </div>
+        </div>
+
+        <!-- Skeleton Loading -->
+        <div
+          v-else-if="isLoading && !isReady && !isEmpty"
+          class="flex w-full flex-col gap-4 p-4 rounded-[24px] bg-[var(--app-surface-elevated)] border border-[var(--app-border)]"
+          key="loading"
         >
-          Generate exercises
-        </button>
-      </div>
-
-      <div v-else-if="isReady && activeExercise" class="w-full">
-        <Transition name="fade-scale" mode="out-in">
-          <div
-            key="exercise-ready"
-            class="w-full max-w-3xl rounded-[30px] border border-[var(--app-border)] bg-gradient-to-br from-[var(--app-panel)] via-[var(--app-surface-elevated)] to-[var(--app-panel)] px-8 py-7 text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] dark:border-[var(--app-border-dark)] dark:bg-gradient-to-br dark:from-[var(--app-surface-dark)] dark:via-[var(--app-surface-dark-elevated)] dark:to-[var(--app-surface-dark)] dark:text-white dark:shadow-2xl"
-          >
-            <div class="flex items-center justify-between text-xs text-[var(--app-text-muted)] dark:text-white/60">
-              <div class="flex flex-wrap items-center gap-2">
-                <span>Exercise card</span>
-                <span class="rounded-full bg-[var(--app-surface-dark-elevated)] px-2 py-0.5 text-[10px] text-white">
-                  Exercise {{ activeIndex + 1 }} of {{ total }}
-                </span>
-                <span
-                  v-if="activeExercise.skill"
-                  class="rounded-full bg-[var(--app-accent-secondary-soft)] px-2 py-0.5 text-[10px] text-[var(--app-accent-secondary)]"
-                >
-                  {{ activeExercise.skill }}
-                </span>
-                <span
-                  class="rounded-full bg-[var(--app-surface-dark-elevated)] px-2 py-0.5 text-[10px] capitalize text-white"
-                >
-                  {{ activeExercise.type }}
-                </span>
-              </div>
-              <div v-if="statusMessage" class="text-[11px] font-semibold">
-                <span
-                  :class="
-                    activeAttempt?.isCorrect
-                      ? 'text-[var(--app-accent-secondary)]'
-                      : 'text-[var(--app-accent-strong)]'
-                  "
-                >
-                  {{ statusMessage }}
-                </span>
-              </div>
-            </div>
-
-            <div class="mt-5 space-y-2">
-              <p class="text-lg font-medium tracking-wide">
-                {{ activeExercise.questionPrompt }}
-              </p>
-              <p
-                v-if="activeExercise.instructions"
-                class="text-xs text-[var(--app-text-muted)] dark:text-white/60"
-              >
-                {{ activeExercise.instructions }}
-              </p>
-            </div>
-
-            <div class="mt-6 space-y-2">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--app-text-muted)] dark:text-white/60">
-                Select an answer
-              </p>
-              <div class="space-y-3">
-                <button
-                  v-for="option in activeExercise.options"
-                  :key="option.id"
-                  type="button"
-                  class="flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition"
-                  :class="optionClasses(option)"
-                  @click="handleSelectOption(option.id)"
-                >
-                  <span class="mr-3 flex-1">
-                    {{ option.text }}
-                  </span>
-                  <span
-                    v-if="selectedOptionId === option.id && !activeAttempt"
-                    class="ml-3 text-[11px] text-[var(--app-text-muted)] dark:text-white/70"
-                  >
-                    Selected
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div
-              v-if="hasAttempt && explanation"
-              class="mt-6 space-y-2 rounded-2xl bg-[var(--app-surface-elevated)] px-4 py-3 text-sm text-[var(--app-text)] dark:bg-white/5 dark:text-white"
-            >
-              <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--app-text-muted)] dark:text-white/60">
-                Why this answer is correct
-              </p>
-              <p>
-                {{ explanation }}
-              </p>
-            </div>
-
-            <div class="mt-6 space-y-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--app-text-muted)] dark:text-white/70">
-                <span>Exercise {{ activeIndex + 1 }} of {{ total }}</span>
-              </div>
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <button
-                  type="button"
-                  class="rounded-full bg-[var(--app-accent)] px-6 py-2 text-sm font-semibold text-white shadow-[0_15px_30px_rgba(249,115,22,0.3)] transition hover:bg-[var(--app-accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="!canSubmit"
-                  @click="handleSubmit"
-                >
-                  {{ hasAttempt ? 'Answer submitted' : 'Check answer' }}
-                </button>
-                <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-2 text-sm text-[var(--app-text)] disabled:opacity-40 dark:border-white/20 dark:bg-white/5 dark:text-white"
-                    :disabled="!hasPrev"
-                    @click="handlePrev"
-                  >
-                    ← Previous
-                  </button>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-2 text-sm text-[var(--app-text)] disabled:opacity-40 dark:border-white/20 dark:bg-white/5 dark:text-white"
-                    :disabled="!hasNext"
-                    @click="handleNext"
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            </div>
+          <div class="w-2/3 h-6 animate-pulse rounded-md bg-[var(--app-panel-muted)]" />
+          <div class="space-y-3 mt-2">
+              <div class="h-12 w-full animate-pulse rounded-xl bg-[var(--app-panel-muted)]" />
+              <div class="h-12 w-full animate-pulse rounded-xl bg-[var(--app-panel-muted)]" />
+              <div class="h-12 w-full animate-pulse rounded-xl bg-[var(--app-panel-muted)]" />
           </div>
-        </Transition>
-      </div>
+        </div>
 
-      <div
-        v-else-if="isReady && !activeExercise"
-        class="flex h-full w-full max-w-3xl items-center justify-center rounded-3xl border border-[var(--app-border)] bg-[var(--app-panel)] px-6 py-6 text-sm text-[var(--app-text-muted)] shadow-[var(--app-card-shadow)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)] dark:text-white/70 dark:shadow-2xl"
-      >
-        No active exercise.
-      </div>
+        <!-- Empty State -->
+        <div
+          v-else-if="emptyStateVisible"
+          class="w-full rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-10 text-center"
+          key="empty"
+        >
+          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-panel-muted)] text-[var(--app-accent)]">
+            <Icon icon="solar:dumbbell-large-bold-duotone" class="h-7 w-7" />
+          </div>
+          <p class="text-sm font-medium text-[var(--app-text)]">No exercises yet</p>
+          <p class="mt-1 text-xs text-[var(--app-text-muted)]">
+            Generate targeted practice items to reinforce this lesson.
+          </p>
+          <button
+            class="mt-6 w-full rounded-xl bg-[var(--app-accent)] px-6 py-3 text-sm font-bold text-white shadow-md shadow-[var(--app-accent)]/20 active:scale-95 transition-transform"
+            @click="openGenerateModal"
+          >
+            Generate exercises
+          </button>
+        </div>
+
+        <!-- Active Exercise Card -->
+        <div v-else-if="isReady && activeExercise" class="w-full flex-1 flex flex-col" key="active">
+            <div class="relative flex-1 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] shadow-sm overflow-hidden flex flex-col">
+               
+               <!-- Card Header / Meta -->
+               <div class="px-5 pt-5 pb-2 flex items-center justify-between">
+                  <div class="flex gap-2">
+                     <span v-if="activeExercise.skill" class="inline-flex items-center rounded-md bg-[var(--app-surface)] border border-[var(--app-border)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--app-text-muted)]">
+                        {{ activeExercise.skill }}
+                     </span>
+                     <span class="inline-flex items-center rounded-md bg-[var(--app-surface)] border border-[var(--app-border)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--app-text-muted)]">
+                        {{ activeExercise.type }}
+                     </span>
+                  </div>
+                  
+                  <!-- Status Indicator -->
+                   <div v-if="statusMessage" class="flex items-center gap-1.5">
+                      <Icon 
+                        :icon="activeAttempt?.isCorrect ? 'solar:check-circle-bold' : 'solar:close-circle-bold'" 
+                        class="h-4 w-4"
+                        :class="activeAttempt?.isCorrect ? 'text-[var(--app-accent-secondary)]' : 'text-red-500'"
+                      />
+                      <span class="text-xs font-bold" :class="activeAttempt?.isCorrect ? 'text-[var(--app-accent-secondary)]' : 'text-red-500'">
+                         {{ statusMessage }}
+                      </span>
+                   </div>
+               </div>
+
+                <!-- Content Scroll Area -->
+               <div class="flex-1 overflow-y-auto px-5 pb-5">
+                   <div class="mt-2 text-[var(--app-text)]">
+                      <h3 class="font-display text-xl font-semibold leading-snug sm:text-2xl">
+                         {{ activeExercise.questionPrompt }}
+                      </h3>
+                      <p v-if="activeExercise.instructions" class="mt-2 text-xs text-[var(--app-text-muted)] leading-relaxed">
+                         {{ activeExercise.instructions }}
+                      </p>
+                   </div>
+
+                   <div class="mt-6 list-none space-y-3">
+                      <button
+                        v-for="option in activeExercise.options"
+                        :key="option.id"
+                        type="button"
+                        class="group relative flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-all active:scale-[0.98]"
+                        :class="optionClasses(option)"
+                        @click="handleSelectOption(option.id)"
+                      >
+                         <div 
+                           class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors"
+                           :class="[
+                              selectedOptionId === option.id 
+                                ? 'border-current' 
+                                : 'border-[var(--app-border)] opacity-50 group-hover:opacity-100'
+                           ]"
+                         >
+                            <div v-if="selectedOptionId === option.id" class="h-2.5 w-2.5 rounded-full bg-current" />
+                         </div>
+                         <span class="text-sm font-medium leading-normal">{{ option.text }}</span>
+                      </button>
+                   </div>
+
+                   <!-- Explanation Box -->
+                   <div
+                      v-if="hasAttempt && explanation"
+                      class="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-300"
+                   >
+                      <div class="rounded-xl bg-[var(--app-surface)] p-4 border border-[var(--app-border)]">
+                         <p class="mb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--app-text-muted)]">
+                            Explanation
+                         </p>
+                         <p class="text-sm leading-relaxed text-[var(--app-text)]">
+                            {{ explanation }}
+                         </p>
+                      </div>
+                   </div>
+               </div>
+
+               <!-- Fixed Bottom Actions -->
+                <div class="mt-auto border-t border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-4 backdrop-blur-xl">
+                   <div class="flex items-center gap-3">
+                      <div class="flex shrink-0 gap-2">
+                         <button
+                            type="button"
+                            class="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] transition active:scale-95 disabled:opacity-40"
+                            :disabled="!hasPrev"
+                            @click="handlePrev"
+                         >
+                            <Icon icon="solar:arrow-left-linear" class="h-5 w-5" />
+                         </button>
+                      </div>
+
+                      <button
+                         v-if="!hasAttempt"
+                         type="button"
+                         class="flex-1 h-12 rounded-xl bg-[var(--app-accent)] px-6 text-sm font-bold text-white shadow-md shadow-[var(--app-accent)]/20 transition active:scale-95 disabled:opacity-50 disabled:shadow-none"
+                         :disabled="!canSubmit"
+                         @click="handleSubmit"
+                      >
+                         Check Answer
+                      </button>
+                      <button
+                         v-else
+                         type="button"
+                         class="flex-1 h-12 rounded-xl bg-[var(--app-surface)] border border-[var(--app-border)] text-[var(--app-text)] px-6 text-sm font-bold transition active:scale-95 hover:bg-[var(--app-surface-elevated)] text-[var(--app-text)]"
+                         @click="handleNext"
+                         :disabled="!hasNext"
+                      >
+                         {{ hasNext ? 'Next Question' : 'Finish' }}
+                         <Icon v-if="hasNext" icon="solar:arrow-right-linear" class="inline-block ml-1 h-4 w-4" />
+                      </button>
+                   </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Fallback -->
+        <div
+          v-else-if="isReady && !activeExercise"
+          class="flex h-full w-full items-center justify-center text-sm text-[var(--app-text-muted)]"
+          key="fallback"
+        >
+          No active exercise.
+        </div>
+      </Transition>
     </div>
 
     <GenerateExercisesModal

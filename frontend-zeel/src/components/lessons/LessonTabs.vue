@@ -29,32 +29,30 @@ const setActiveTab = (id: typeof activeTab.value) => {
     class="flex h-full w-full max-w-full flex-col overflow-x-hidden text-[var(--app-text)] dark:text-[var(--app-text)]"
   >
     <!-- Tabs header -->
-    <div
-      class="w-full max-w-full overflow-x-auto"
-    >
+    <div class="w-full max-w-full px-1">
       <div
-        class="inline-flex min-w-full flex-wrap gap-2 rounded-[18px] border border-[var(--app-border)] bg-[var(--app-panel-muted)]/60 p-1 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/80 sm:gap-3 sm:rounded-[999px] sm:p-1.5"
+        class="grid grid-cols-5 gap-1 rounded-[16px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-1 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] sm:inline-flex sm:w-auto sm:grid-cols-none sm:gap-2 sm:rounded-[999px] sm:bg-[var(--app-panel-muted)]/60 sm:p-1.5"
       >
         <button
           v-for="tab in tabs"
           :key="tab.id"
           type="button"
-          class="flex-1 rounded-full px-3 py-2 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)] sm:flex-none sm:px-5 sm:py-2.5 sm:text-sm"
+          class="flex items-center justify-center rounded-xl p-1.5 text-[10px] font-bold transition-all sm:rounded-full sm:px-5 sm:py-2.5 sm:text-sm"
           :class="[
             activeTab === tab.id
-              ? 'bg-[var(--app-accent)] text-white shadow-[0_12px_30px_rgba(249,115,22,0.35)]'
-              : 'border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/80 dark:text-[var(--app-text-muted)] dark:hover:text-[var(--app-text)] dark:hover:bg-[color:rgba(255,255,255,0.05)]',
+              ? 'bg-[var(--app-accent)] text-white shadow-md scale-[1.02]'
+              : 'text-[var(--app-text-muted)] hover:bg-[var(--app-panel-muted)] hover:text-[var(--app-text)] dark:hover:bg-white/5',
           ]"
           @click="setActiveTab(tab.id)"
         >
-          {{ tab.label }}
+          <span class="truncate">{{ tab.label }}</span>
         </button>
       </div>
     </div>
 
     <!-- Tab content -->
     <div
-      class="mt-6 flex-1 w-full max-w-full overflow-x-hidden rounded-[22px] border border-[var(--app-border)] bg-[var(--app-panel)] p-4 shadow-[var(--app-card-shadow-strong)] sm:p-6 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)] dark:shadow-[0_35px_80px_rgba(0,0,0,0.55)]"
+      class="mt-4 flex-1 w-full max-w-full overflow-x-hidden rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-4 shadow-sm sm:mt-6 sm:p-6 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]"
     >
       <LessonTabFlashcards
         v-if="activeTab === 'flashcards'"

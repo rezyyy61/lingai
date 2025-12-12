@@ -10,7 +10,7 @@ const updateIsMobile = () => {
     isMobile.value = false
     return
   }
-  isMobile.value = window.innerWidth < 1280
+  isMobile.value = window.innerWidth < 1024
 }
 
 onMounted(() => {

@@ -2,19 +2,20 @@
 
 namespace App\Jobs;
 
-use App\Enums\LessonNlpTask;
 use App\Models\Lesson;
 use App\Models\LessonExercise;
 use App\Models\LessonExerciseOption;
-use App\Services\Lessons\LessonNlpService;
+use App\Models\LessonGrammarPoint;
+use App\Models\LessonWord;
+use App\Services\Lessons\LessonExerciseService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class GenerateLessonExercisesJob implements ShouldQueue
 {
@@ -26,9 +27,11 @@ class GenerateLessonExercisesJob implements ShouldQueue
 
     public bool $replaceExisting;
 
-    public $tries = 2;
+    public int $timeout = 90;
 
-    public $backoff = 60;
+    public int $tries = 1;
+
+    public int $backoff = 30;
 
     public function __construct(Lesson $lesson, ?string $customPrompt = null, bool $replaceExisting = true)
     {
@@ -37,60 +40,94 @@ class GenerateLessonExercisesJob implements ShouldQueue
         $this->replaceExisting = $replaceExisting;
     }
 
-    public function handle(LessonNlpService $nlp): void
+    public function handle(LessonExerciseService $service): void
     {
         $lesson = $this->lesson->fresh();
 
-        if (! $lesson) {
+        if (! $lesson || ! $lesson->original_text || trim((string) $lesson->original_text) === '') {
             return;
         }
 
-        if (! $lesson->original_text) {
-            return;
-        }
+        $words = LessonWord::query()
+            ->where('lesson_id', $lesson->id)
+            ->orderBy('id')
+            ->get(['term', 'meaning', 'example_sentence', 'translation'])
+            ->map(fn ($w) => [
+                'term' => $w->term,
+                'meaning' => $w->meaning,
+                'example_sentence' => $w->example_sentence,
+                'translation' => $w->translation,
+            ])
+            ->all();
+
+        $grammarPoints = LessonGrammarPoint::query()
+            ->where('lesson_id', $lesson->id)
+            ->orderBy('id')
+            ->get(['key', 'title', 'pattern'])
+            ->map(fn ($g) => [
+                'id' => $g->key,
+                'title' => $g->title,
+                'pattern' => $g->pattern,
+            ])
+            ->all();
 
         try {
-            $analysis = $nlp->analyzeText(
-                $lesson->original_text,
-                $lesson->target_language ?? config('learning_languages.default_target', 'en'),
-                $lesson->support_language ?? config('learning_languages.default_support', 'en'),
-                LessonNlpTask::ExercisesOnly,
+            $exercises = $service->generate(
+                $lesson,
+                $words,
+                $grammarPoints,
+                (int) config('services.openai.exercises_count', 18),
                 $this->customPrompt
             );
-        } catch (ConnectionException|RequestException|\Throwable $e) {
+        } catch (Throwable $e) {
+            Log::error('GenerateLessonExercisesJob: service exception', [
+                'lesson_id' => $lesson->id ?? null,
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+            ]);
             report($e);
             return;
         }
-
-        $exercises = $analysis['exercises'] ?? [];
 
         if (! is_array($exercises) || empty($exercises)) {
             return;
         }
 
-        DB::transaction(function () use ($lesson, $exercises) {
-            if ($this->replaceExisting) {
-                LessonExercise::where('lesson_id', $lesson->id)->delete();
-            }
+        try {
+            DB::transaction(function () use ($lesson, $exercises) {
+                if ($this->replaceExisting) {
+                    LessonExercise::where('lesson_id', $lesson->id)->delete();
+                }
 
-            foreach ($exercises as $exerciseData) {
-                $exercise = LessonExercise::create([
-                    'lesson_id' => $lesson->id,
-                    'lesson_sentence_id' => $exerciseData['lesson_sentence_id'] ?? null,
-                    'type' => $exerciseData['type'] ?? 'mcq',
-                    'skill' => $exerciseData['skill'] ?? 'vocabulary',
-                    'question_prompt' => $exerciseData['question_prompt'] ?? '',
-                    'instructions' => $exerciseData['instructions'] ?? null,
-                    'solution_explanation' => $exerciseData['solution_explanation'] ?? null,
-                    'meta' => $exerciseData['meta'] ?? null,
-                ]);
+                $labels = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-                if (! empty($exerciseData['options']) && is_array($exerciseData['options'])) {
-                    $labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+                foreach ($exercises as $exerciseData) {
+                    if (! is_array($exerciseData)) {
+                        continue;
+                    }
 
-                    $options = array_values($exerciseData['options']);
+                    $exercise = LessonExercise::create([
+                        'lesson_id' => $lesson->id,
+                        'lesson_sentence_id' => null,
+                        'type' => 'mcq',
+                        'skill' => $exerciseData['skill'] ?? 'vocabulary',
+                        'question_prompt' => $exerciseData['question_prompt'] ?? '',
+                        'instructions' => $exerciseData['instructions'] ?? null,
+                        'solution_explanation' => $exerciseData['solution_explanation'] ?? null,
+                        'meta' => $exerciseData['meta'] ?? null,
+                    ]);
 
-                    foreach ($options as $index => $optionData) {
+                    $options = $exerciseData['options'] ?? null;
+
+                    if (! is_array($options) || empty($options)) {
+                        continue;
+                    }
+
+                    foreach (array_values($options) as $index => $optionData) {
+                        if (! is_array($optionData)) {
+                            continue;
+                        }
+
                         LessonExerciseOption::create([
                             'lesson_exercise_id' => $exercise->id,
                             'order_index' => $index + 1,
@@ -101,11 +138,23 @@ class GenerateLessonExercisesJob implements ShouldQueue
                         ]);
                     }
                 }
-            }
-        });
+            });
+        } catch (Throwable $e) {
+            Log::error('GenerateLessonExercisesJob: db failure', [
+                'lesson_id' => $lesson->id ?? null,
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+            ]);
+            report($e);
+        }
     }
 
-    public function failed(): void
+    public function failed(Throwable $e): void
     {
+        Log::error('GenerateLessonExercisesJob: failed', [
+            'lesson_id' => $this->lesson->id ?? null,
+            'exception' => get_class($e),
+            'message' => $e->getMessage(),
+        ]);
     }
 }
