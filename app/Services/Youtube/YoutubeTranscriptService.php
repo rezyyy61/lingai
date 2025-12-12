@@ -7,28 +7,21 @@ use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\TransferStats;
 use Illuminate\Support\Facades\Log;
+use MrMySQL\YoutubeTranscript\Exception\NoTranscriptFoundException;
+use MrMySQL\YoutubeTranscript\Exception\TranscriptsDisabledException;
 use MrMySQL\YoutubeTranscript\TranscriptListFetcher;
-use MrMySQL\YoutubeTranscript\Exception\NoTranscriptFoundException as NoTranscriptFoundExceptionV1;
-use MrMySQL\YoutubeTranscript\Exception\TranscriptsDisabledException as TranscriptsDisabledExceptionV1;
-use MrMySQL\YoutubeTranscript\Exceptions\NoTranscriptFoundException as NoTranscriptFoundExceptionV2;
-use MrMySQL\YoutubeTranscript\Exceptions\TranscriptsDisabledException as TranscriptsDisabledExceptionV2;
+use Throwable;
 
 class YoutubeTranscriptService
 {
     protected TranscriptListFetcher $fetcher;
-    protected Client $http;
-    protected bool $debug;
 
     public function __construct()
     {
-        $this->debug = (bool) config('services.youtube_transcript.debug', false);
-
         $headers = [
-            'User-Agent' => (string) config('services.youtube_transcript.user_agent', 'Mozilla/5.0'),
+            'User-Agent' => (string) config('services.youtube_transcript.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
             'Accept-Language' => (string) config('services.youtube_transcript.accept_language', 'en-US,en;q=0.9'),
             'Accept' => (string) config('services.youtube_transcript.accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
-            'Referer' => 'https://www.youtube.com/',
-            'Origin' => 'https://www.youtube.com',
         ];
 
         $cookie = trim((string) config('services.youtube_transcript.cookie', ''));
@@ -37,24 +30,31 @@ class YoutubeTranscriptService
         }
 
         $httpClient = new Client([
-            'timeout' => (float) config('services.youtube_transcript.timeout', 25),
-            'connect_timeout' => (float) config('services.youtube_transcript.connect_timeout', 10),
+            'timeout' => (float) (config('services.youtube_transcript.timeout', 25)),
+            'connect_timeout' => (float) (config('services.youtube_transcript.connect_timeout', 10)),
             'http_errors' => false,
             'allow_redirects' => true,
             'headers' => $headers,
             'on_stats' => function (TransferStats $stats) {
-                if (! $this->debug) {
+                if (! config('services.youtube_transcript.debug', false)) {
                     return;
                 }
 
                 $handlerStats = $stats->getHandlerStats() ?? [];
+
                 Log::info('YoutubeTranscriptService: http stats', [
                     'url' => (string) $stats->getEffectiveUri(),
                     'time' => $stats->getTransferTime(),
                     'handler' => [
-                        'http_code' => $handlerStats['http_code'] ?? null,
                         'primary_ip' => $handlerStats['primary_ip'] ?? null,
+                        'primary_port' => $handlerStats['primary_port'] ?? null,
+                        'local_ip' => $handlerStats['local_ip'] ?? null,
+                        'http_code' => $handlerStats['http_code'] ?? null,
                         'total_time' => $handlerStats['total_time'] ?? null,
+                        'namelookup_time' => $handlerStats['namelookup_time'] ?? null,
+                        'connect_time' => $handlerStats['connect_time'] ?? null,
+                        'appconnect_time' => $handlerStats['appconnect_time'] ?? null,
+                        'starttransfer_time' => $handlerStats['starttransfer_time'] ?? null,
                         'redirect_count' => $handlerStats['redirect_count'] ?? null,
                         'ssl_verify_result' => $handlerStats['ssl_verify_result'] ?? null,
                     ],
@@ -63,9 +63,8 @@ class YoutubeTranscriptService
             },
         ]);
 
-        $this->http = $httpClient;
-
         $httpFactory = new HttpFactory();
+
         $this->fetcher = new TranscriptListFetcher($httpClient, $httpFactory, $httpFactory);
     }
 
@@ -74,44 +73,39 @@ class YoutubeTranscriptService
         $videoId = $this->extractVideoId($url);
 
         if (! $videoId) {
-            Log::warning('YoutubeTranscriptService: could not extract video ID from URL', ['url' => $url]);
+            Log::warning('YoutubeTranscriptService: could not extract video ID from URL', [
+                'url' => $url,
+            ]);
             return null;
         }
 
         try {
             $list = $this->fetcher->fetch($videoId);
-
-            $langTry = array_values(array_unique(array_filter([
-                $language,
-                $language === 'en' ? 'en-US' : null,
-                $language === 'en' ? 'en-GB' : null,
-            ])));
-
-            $transcript = $list->findTranscript($langTry);
+            $transcript = $list->findTranscript([$language]);
             $segments = $transcript->fetch();
 
-            $text = $this->segmentsToText($segments);
+            $parts = [];
+
+            foreach ($segments as $segment) {
+                $text = is_array($segment) ? ($segment['text'] ?? '') : '';
+                if ($text !== '') {
+                    $parts[] = $text;
+                }
+            }
+
+            $text = trim(implode(' ', $parts));
 
             if ($text !== '') {
                 return $text;
             }
-
-            Log::warning('YoutubeTranscriptService: empty transcript text after fetch', [
-                'video_id' => $videoId,
-                'language' => $language,
-            ]);
-
-        } catch (
-        NoTranscriptFoundExceptionV1|NoTranscriptFoundExceptionV2|
-        TranscriptsDisabledExceptionV1|TranscriptsDisabledExceptionV2
-        $e) {
+        } catch (NoTranscriptFoundException|TranscriptsDisabledException $e) {
             Log::warning('YoutubeTranscriptService: transcript unavailable (package)', [
                 'video_id' => $videoId,
                 'language' => $language,
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
             ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logThrowableChain($e, [
                 'video_id' => $videoId,
                 'language' => $language,
@@ -120,225 +114,275 @@ class YoutubeTranscriptService
             report($e);
         }
 
-        $fallback = $this->fetchTranscriptViaPlayerResponse($videoId, $language);
+        $fallback = $this->fetchTranscriptViaYtDlp($url, $language);
 
-        if ($fallback !== null && trim($fallback) !== '') {
-            Log::info('YoutubeTranscriptService: transcript fetched via fallback', [
-                'video_id' => $videoId,
-                'language' => $language,
-                'chars' => mb_strlen($fallback),
-            ]);
+        if ($fallback !== null) {
             return $fallback;
         }
 
         return null;
     }
 
-    protected function fetchTranscriptViaPlayerResponse(string $videoId, string $language): ?string
+    protected function fetchTranscriptViaYtDlp(string $url, string $language): ?string
     {
-        try {
-            $watch = $this->http->get('https://www.youtube.com/watch?v=' . $videoId);
-            $html = (string) $watch->getBody();
-
-            $player = $this->extractJsonObjectFromHtml($html, 'ytInitialPlayerResponse');
-            if (! is_array($player)) {
-                if ($this->debug) {
-                    Log::warning('YoutubeTranscriptService: fallback: player response not found', ['video_id' => $videoId]);
-                }
-                return null;
-            }
-
-            $tracks = data_get($player, 'captions.playerCaptionsTracklistRenderer.captionTracks', []);
-            if (! is_array($tracks) || empty($tracks)) {
-                if ($this->debug) {
-                    Log::warning('YoutubeTranscriptService: fallback: no captionTracks', [
-                        'video_id' => $videoId,
-                        'has_captions' => data_get($player, 'captions') !== null,
-                    ]);
-                }
-                return null;
-            }
-
-            if ($this->debug) {
-                Log::info('YoutubeTranscriptService: fallback: captionTracks found', [
-                    'video_id' => $videoId,
-                    'count' => count($tracks),
-                    'langs' => array_values(array_unique(array_filter(array_map(fn ($t) => $t['languageCode'] ?? null, $tracks)))),
-                ]);
-            }
-
-            $track = $this->pickBestTrack($tracks, $language) ?? $tracks[0] ?? null;
-            $baseUrl = is_array($track) ? ($track['baseUrl'] ?? null) : null;
-            if (! is_string($baseUrl) || $baseUrl === '') {
-                return null;
-            }
-
-            $resp = $this->http->get($baseUrl . '&fmt=json3');
-            $json = json_decode((string) $resp->getBody(), true);
-
-            if (! is_array($json)) {
-                return null;
-            }
-
-            $events = $json['events'] ?? null;
-            if (! is_array($events)) {
-                return null;
-            }
-
-            $parts = [];
-            foreach ($events as $ev) {
-                $segs = is_array($ev) ? ($ev['segs'] ?? null) : null;
-                if (! is_array($segs)) {
-                    continue;
-                }
-                foreach ($segs as $seg) {
-                    $t = is_array($seg) ? ($seg['utf8'] ?? '') : '';
-                    $t = trim((string) $t);
-                    if ($t !== '') {
-                        $parts[] = $t;
-                    }
-                }
-            }
-
-            $text = trim(preg_replace('/\s+/', ' ', implode(' ', $parts)) ?? '');
-            return $text !== '' ? $text : null;
-        } catch (\Throwable $e) {
-            if ($this->debug) {
-                $this->logThrowableChain($e, ['video_id' => $videoId, 'language' => $language, 'fallback' => true]);
-            }
+        $bin = trim((string) config('services.youtube_transcript.yt_dlp_bin', 'yt-dlp'));
+        if ($bin === '') {
             return null;
         }
+
+        $baseDir = storage_path('app/tmp/ytdlp_subs');
+        if (! is_dir($baseDir)) {
+            @mkdir($baseDir, 0775, true);
+        }
+
+        $runKey = bin2hex(random_bytes(10));
+        $runDir = rtrim($baseDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $runKey;
+        @mkdir($runDir, 0775, true);
+
+        $langs = $language . '.*';
+        if (strtolower($language) !== 'en') {
+            $langs .= ',en.*';
+        }
+
+        $outTemplate = rtrim($runDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '%(id)s.%(ext)s';
+
+        $args = [
+            $bin,
+            '--skip-download',
+            '--no-warnings',
+            '--no-playlist',
+            '--write-subs',
+            '--write-auto-subs',
+            '--sub-langs', $langs,
+            '--sub-format', 'vtt',
+            '--convert-subs', 'vtt',
+            '-o', $outTemplate,
+            $url,
+        ];
+
+        $cookie = trim((string) config('services.youtube_transcript.cookie', ''));
+        if ($cookie !== '') {
+            array_splice($args, 1, 0, ['--add-header', 'Cookie: ' . $cookie]);
+        }
+
+        $ua = trim((string) config('services.youtube_transcript.user_agent', ''));
+        if ($ua !== '') {
+            array_splice($args, 1, 0, ['--user-agent', $ua]);
+        }
+
+        $al = trim((string) config('services.youtube_transcript.accept_language', ''));
+        if ($al !== '') {
+            array_splice($args, 1, 0, ['--add-header', 'Accept-Language: ' . $al]);
+        }
+
+        $timeout = (int) config('services.youtube_transcript.yt_dlp_timeout', 35);
+        $timeout = max(10, min(120, $timeout));
+
+        $cmd = $this->buildShellCommand($args);
+
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+
+        $proc = @proc_open($cmd, $descriptors, $pipes, $runDir);
+
+        if (! is_resource($proc)) {
+            $this->cleanupDir($runDir);
+            Log::warning('YoutubeTranscriptService: yt-dlp failed to start', [
+                'bin' => $bin,
+            ]);
+            return null;
+        }
+
+        fclose($pipes[0]);
+
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $stdout = '';
+        $stderr = '';
+        $start = microtime(true);
+
+        while (true) {
+            $stdout .= (string) stream_get_contents($pipes[1]);
+            $stderr .= (string) stream_get_contents($pipes[2]);
+
+            $status = proc_get_status($proc);
+            if (! ($status['running'] ?? false)) {
+                break;
+            }
+
+            if ((microtime(true) - $start) > $timeout) {
+                proc_terminate($proc, 9);
+                break;
+            }
+
+            usleep(20000);
+        }
+
+        $stdout .= (string) stream_get_contents($pipes[1]);
+        $stderr .= (string) stream_get_contents($pipes[2]);
+
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        $exit = proc_close($proc);
+
+        $vttPath = $this->findBestSubtitleFile($runDir);
+
+        if (! $vttPath) {
+            Log::warning('YoutubeTranscriptService: yt-dlp no subtitles', [
+                'url' => $url,
+                'language' => $language,
+                'exit' => $exit,
+                'stderr_head' => mb_substr($stderr, 0, 900),
+                'stdout_head' => mb_substr($stdout, 0, 400),
+            ]);
+            $this->cleanupDir($runDir);
+            return null;
+        }
+
+        $raw = @file_get_contents($vttPath);
+        $text = $this->vttToPlainText((string) $raw);
+
+        $maxChars = (int) config('services.youtube_transcript.yt_dlp_max_chars', 60000);
+        if ($maxChars > 0 && mb_strlen($text) > $maxChars) {
+            $text = mb_substr($text, 0, $maxChars);
+        }
+
+        $this->cleanupDir($runDir);
+
+        if (trim($text) === '') {
+            Log::warning('YoutubeTranscriptService: yt-dlp empty text after parse', [
+                'url' => $url,
+                'language' => $language,
+                'file' => basename($vttPath),
+            ]);
+            return null;
+        }
+
+        return $text;
     }
 
-    protected function pickBestTrack(array $tracks, string $language): ?array
+    protected function findBestSubtitleFile(string $dir): ?string
     {
-        $lang = strtolower($language);
-
-        foreach ($tracks as $t) {
-            $code = strtolower((string) ($t['languageCode'] ?? ''));
-            if ($code === $lang) {
-                return $t;
-            }
+        $candidates = glob(rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '*.vtt') ?: [];
+        if (empty($candidates)) {
+            return null;
         }
 
-        if ($lang === 'en') {
-            foreach ($tracks as $t) {
-                $code = strtolower((string) ($t['languageCode'] ?? ''));
-                if (str_starts_with($code, 'en-')) {
-                    return $t;
-                }
-            }
-        }
+        usort($candidates, function ($a, $b) {
+            return filemtime($b) <=> filemtime($a);
+        });
 
-        return null;
+        return $candidates[0] ?? null;
     }
 
-    protected function segmentsToText(array $segments): string
+    protected function vttToPlainText(string $vtt): string
     {
-        $parts = [];
+        $vtt = preg_replace("/\xEF\xBB\xBF/", '', $vtt) ?? $vtt;
 
-        foreach ($segments as $segment) {
-            $text = is_array($segment) ? (string) ($segment['text'] ?? '') : '';
-            $text = trim($text);
-            if ($text !== '') {
-                $parts[] = $text;
+        $lines = preg_split("/\r\n|\n|\r/", $vtt) ?: [];
+        $out = [];
+
+        foreach ($lines as $line) {
+            $line = trim((string) $line);
+
+            if ($line === '' || stripos($line, 'WEBVTT') === 0 || stripos($line, 'NOTE') === 0) {
+                continue;
+            }
+
+            if (preg_match('/^\d+$/', $line)) {
+                continue;
+            }
+
+            if (strpos($line, '-->') !== false) {
+                continue;
+            }
+
+            $line = preg_replace('/<[^>]+>/', '', $line) ?? $line;
+            $line = preg_replace('/\{\\an\d+\}/', '', $line) ?? $line;
+            $line = trim((string) preg_replace('/\s+/', ' ', $line));
+
+            if ($line !== '') {
+                $out[] = $line;
             }
         }
 
-        return trim(preg_replace('/\s+/', ' ', implode(' ', $parts)) ?? '');
+        $text = trim(implode(' ', $out));
+        $text = trim((string) preg_replace('/\s+/', ' ', $text));
+
+        return $text;
+    }
+
+    protected function buildShellCommand(array $args): string
+    {
+        $escaped = array_map(function ($a) {
+            return escapeshellarg((string) $a);
+        }, $args);
+
+        return implode(' ', $escaped);
+    }
+
+    protected function cleanupDir(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+
+        $items = glob(rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '*') ?: [];
+        foreach ($items as $item) {
+            if (is_dir($item)) {
+                $this->cleanupDir($item);
+                @rmdir($item);
+                continue;
+            }
+            @unlink($item);
+        }
+
+        @rmdir($dir);
     }
 
     protected function extractVideoId(string $url): ?string
     {
         $url = trim($url);
 
-        // youtu.be/<id>
         if (preg_match('~youtu\.be/([a-zA-Z0-9_-]{6,})~', $url, $m)) {
             return $m[1];
         }
 
-        // youtube.com/watch?v=<id>
-        $parts = parse_url($url);
-        if (is_array($parts) && ($parts['host'] ?? null)) {
-            parse_str($parts['query'] ?? '', $q);
-            if (! empty($q['v']) && is_string($q['v'])) {
-                return $q['v'];
-            }
+        if (preg_match('~youtube\.com/watch\?[^#]*v=([a-zA-Z0-9_-]{6,})~', $url, $m)) {
+            return $m[1];
         }
 
-        // youtube.com/embed/<id>
         if (preg_match('~youtube\.com/embed/([a-zA-Z0-9_-]{6,})~', $url, $m)) {
             return $m[1];
         }
 
-        // youtube.com/shorts/<id>
         if (preg_match('~youtube\.com/shorts/([a-zA-Z0-9_-]{6,})~', $url, $m)) {
             return $m[1];
         }
 
-        return null;
-    }
-
-    /**
-     * Extract a JS object like: var ytInitialPlayerResponse = {...};
-     * Without fragile regex on nested braces (brace counting).
-     */
-    protected function extractJsonObjectFromHtml(string $html, string $varName): ?array
-    {
-        $pos = strpos($html, $varName);
-        if ($pos === false) {
-            return null;
+        if (preg_match('~youtube\.com/live/([a-zA-Z0-9_-]{6,})~', $url, $m)) {
+            return $m[1];
         }
 
-        $start = strpos($html, '{', $pos);
-        if ($start === false) {
-            return null;
-        }
-
-        $depth = 0;
-        $inStr = false;
-        $escape = false;
-
-        $len = strlen($html);
-        for ($i = $start; $i < $len; $i++) {
-            $ch = $html[$i];
-
-            if ($inStr) {
-                if ($escape) {
-                    $escape = false;
-                    continue;
-                }
-                if ($ch === '\\') {
-                    $escape = true;
-                    continue;
-                }
-                if ($ch === '"') {
-                    $inStr = false;
-                }
-                continue;
-            }
-
-            if ($ch === '"') {
-                $inStr = true;
-                continue;
-            }
-
-            if ($ch === '{') {
-                $depth++;
-            } elseif ($ch === '}') {
-                $depth--;
-                if ($depth === 0) {
-                    $jsonStr = substr($html, $start, $i - $start + 1);
-                    $data = json_decode($jsonStr, true);
-                    return is_array($data) ? $data : null;
-                }
+        $parts = parse_url($url);
+        $query = $parts['query'] ?? null;
+        if ($query) {
+            parse_str($query, $q);
+            $v = $q['v'] ?? null;
+            if (is_string($v) && $v !== '') {
+                return $v;
             }
         }
 
         return null;
     }
 
-    protected function logThrowableChain(\Throwable $e, array $context = []): void
+    protected function logThrowableChain(Throwable $e, array $context = []): void
     {
         $chain = [];
         $current = $e;
@@ -353,18 +397,24 @@ class YoutubeTranscriptService
 
             if ($current instanceof RequestException) {
                 $response = $current->getResponse();
+
                 if ($response) {
                     $body = (string) $response->getBody();
+
                     $item['http'] = [
                         'status' => $response->getStatusCode(),
                         'reason' => $response->getReasonPhrase(),
-                        'content_type' => $response->getHeaderLine('Content-Type'),
-                        'location' => $response->getHeaderLine('Location'),
+                        'headers' => [
+                            'content-type' => $response->getHeaderLine('Content-Type'),
+                            'location' => $response->getHeaderLine('Location'),
+                            'set-cookie' => $response->getHeader('Set-Cookie'),
+                        ],
                         'body_head' => mb_substr($body, 0, 800),
                     ];
                 }
 
                 $request = $current->getRequest();
+
                 if ($request) {
                     $item['request'] = [
                         'method' => $request->getMethod(),
@@ -374,6 +424,7 @@ class YoutubeTranscriptService
             }
 
             $chain[] = $item;
+
             $current = $current->getPrevious();
             $depth++;
         }

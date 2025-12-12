@@ -49,8 +49,12 @@ return [
         'user_agent' => env('YOUTUBE_TRANSCRIPT_USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
         'accept_language' => env('YOUTUBE_TRANSCRIPT_ACCEPT_LANGUAGE', 'en-US,en;q=0.9'),
         'accept' => env('YOUTUBE_TRANSCRIPT_ACCEPT', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
-        'cookie' => env('YOUTUBE_TRANSCRIPT_COOKIE', ''),
+        'cookie' => env('YOUTUBE_TRANSCRIPT_COOKIE'),
         'debug' => env('YOUTUBE_TRANSCRIPT_DEBUG', false),
+
+        'yt_dlp_bin' => env('YOUTUBE_TRANSCRIPT_YTDLP_BIN', 'yt-dlp'),
+        'yt_dlp_timeout' => env('YOUTUBE_TRANSCRIPT_YTDLP_TIMEOUT', 35),
+        'yt_dlp_max_chars' => env('YOUTUBE_TRANSCRIPT_YTDLP_MAX_CHARS', 60000),
     ],
 
 
