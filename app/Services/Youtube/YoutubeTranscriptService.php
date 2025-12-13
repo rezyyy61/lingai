@@ -125,7 +125,7 @@ class YoutubeTranscriptService
 
     protected function fetchTranscriptViaYtDlp(string $url, string $language): ?string
     {
-        $bin = trim((string) config('services.youtube_transcript.yt_dlp_bin', 'yt-dlp'));
+        $bin = trim((string) config('services.youtube_transcript.yt_dlp_bin', '/opt/yt/bin/yt-dlp'));
         if ($bin === '') {
             return null;
         }
@@ -149,7 +149,6 @@ class YoutubeTranscriptService
         $args = [
             $bin,
             '--skip-download',
-            '--no-warnings',
             '--no-playlist',
             '--write-subs',
             '--write-auto-subs',
@@ -157,12 +156,25 @@ class YoutubeTranscriptService
             '--sub-format', 'vtt',
             '--convert-subs', 'vtt',
             '-o', $outTemplate,
-            $url,
         ];
 
-        $cookie = trim((string) config('services.youtube_transcript.cookie', ''));
-        if ($cookie !== '') {
-            array_splice($args, 1, 0, ['--add-header', 'Cookie: ' . $cookie]);
+        $jsRuntimes = trim((string) config('services.youtube_transcript.js_runtimes', 'node:/usr/bin/node'));
+        if ($jsRuntimes !== '') {
+            array_splice($args, 1, 0, ['--js-runtimes', $jsRuntimes]);
+        }
+
+        $remoteComponents = trim((string) config('services.youtube_transcript.remote_components', ''));
+        if ($remoteComponents !== '') {
+            array_splice($args, 1, 0, ['--remote-components', $remoteComponents]);
+        }
+
+        $cookiesFile = trim((string) config('services.youtube_transcript.cookies_file', ''));
+        if ($cookiesFile !== '' && is_file($cookiesFile)) {
+            $cookieCopy = rtrim($runDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'youtube-cookies.txt';
+            @copy($cookiesFile, $cookieCopy);
+            if (is_file($cookieCopy)) {
+                array_splice($args, 1, 0, ['--cookies', $cookieCopy]);
+            }
         }
 
         $ua = trim((string) config('services.youtube_transcript.user_agent', ''));
@@ -175,8 +187,10 @@ class YoutubeTranscriptService
             array_splice($args, 1, 0, ['--add-header', 'Accept-Language: ' . $al]);
         }
 
-        $timeout = (int) config('services.youtube_transcript.yt_dlp_timeout', 35);
-        $timeout = max(10, min(120, $timeout));
+        $args[] = $url;
+
+        $timeout = (int) config('services.youtube_transcript.yt_dlp_timeout', 45);
+        $timeout = max(10, min(180, $timeout));
 
         $cmd = $this->buildShellCommand($args);
 
@@ -237,8 +251,8 @@ class YoutubeTranscriptService
                 'url' => $url,
                 'language' => $language,
                 'exit' => $exit,
-                'stderr_head' => mb_substr($stderr, 0, 900),
-                'stdout_head' => mb_substr($stdout, 0, 400),
+                'stderr_head' => mb_substr($stderr, 0, 1200),
+                'stdout_head' => mb_substr($stdout, 0, 600),
             ]);
             $this->cleanupDir($runDir);
             return null;
