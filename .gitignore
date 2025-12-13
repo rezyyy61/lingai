@@ -25,3 +25,4 @@ pnpm-debug.log
 /public/build
 /.fleet
 
+storage/yt-dlp/youtube-cookies.txt
