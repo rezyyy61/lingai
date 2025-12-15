@@ -3,12 +3,21 @@
 namespace App\Services\Lessons;
 
 use App\Models\Lesson;
-use Illuminate\Support\Facades\Http;
+use App\Services\Ai\LlmClient;
+use App\Services\Ai\Pipelines\ChunkedPromptRunner;
+use App\Services\Text\ChunkPlan;
+use App\Services\Text\ChunkPolicy;
+use App\Services\Text\TextChunker;
 use Illuminate\Support\Facades\Log;
-use Throwable;
 
 class LessonGrammarService
 {
+    public function __construct(
+        protected LlmClient $llm,
+        protected TextChunker $chunker,
+        protected ChunkedPromptRunner $runner,
+    ) {}
+
     public function generateGrammar(Lesson $lesson, ?string $customPrompt = null): array
     {
         if (! $lesson->original_text) {
@@ -18,48 +27,254 @@ class LessonGrammarService
             ];
         }
 
-        $targetLanguage = $lesson->target_language ?? config('learning_languages.default_target', 'en');
-        $supportLanguage = $lesson->support_language ?? config('learning_languages.default_support', 'en');
+        $provider = (string) config('services.openai.provider', 'openai');
 
-        $targetLabel = $this->labelForLanguage($targetLanguage);
-        $supportLabel = $this->labelForLanguage($supportLanguage);
+        $targetLanguage = (string) ($lesson->target_language ?? config('learning_languages.default_target', 'en'));
+        $supportLanguage = (string) ($lesson->support_language ?? config('learning_languages.default_support', 'en'));
 
-        $rawText = strip_tags($lesson->original_text);
-        $plainText = trim((string) preg_replace('/\s+/', ' ', $rawText));
+        $targetMeta = $this->langMeta($targetLanguage);
+        $supportMeta = $this->langMeta($supportLanguage);
 
-        $wordCount = str_word_count($plainText);
+        $plainText = $this->normalizeText($lesson->original_text);
+
+        if ($plainText === '') {
+            return [
+                'grammar_points' => [],
+                'exercises' => [],
+            ];
+        }
+
+        $wordCount = $this->wordCount($plainText);
 
         $maxChars = (int) config('services.openai.grammar_max_chars', 5000);
-        if (mb_strlen($plainText) > $maxChars) {
-            $plainText = mb_substr($plainText, 0, $maxChars) . '...';
+        $shrunk = $this->shrinkText($plainText, $maxChars);
+
+        // Decide: 1 or 2 grammar points total
+        $desiredTotal = $this->desiredGrammarPointCount($wordCount);
+
+        $policy = $this->grammarChunkPolicy();
+        $plan = $this->chunker->plan($shrunk, $policy);
+
+        if (empty($plan->chunks)) {
+            return [
+                'grammar_points' => [],
+                'exercises' => [],
+            ];
         }
+
+        $options = $this->llmOptionsForGrammar($provider);
+
+        $logContext = [
+            'pipeline' => 'lesson_grammar',
+            'provider' => $provider,
+            'lesson_id' => $lesson->id ?? null,
+            'target_lang' => $targetLanguage,
+            'support_lang' => $supportLanguage,
+            'desired' => $desiredTotal,
+            'chunks' => count($plan->chunks),
+            'total_words' => $plan->totalWords ?? null,
+            'total_chars' => $plan->totalChars ?? null,
+            'time_budget_ms' => $policy->timeBudgetMs ?? null,
+        ];
+
+        // Strategy: request only 1 point per chunk => faster + stable
+        $perChunkTarget = 1;
+        $perChunkMin = 1;
+
+        $all = [];
+
+        foreach ($plan->chunks as $i => $chunkText) {
+            $chunkIndex = $i + 1;
+            $chunksTotal = count($plan->chunks);
+
+            $singlePlan = new ChunkPlan(
+                [$chunkText],
+                (int) ($plan->targetWords ?? 0),
+                (int) ($plan->overlapWords ?? 0),
+                $this->wordCount($chunkText),
+                mb_strlen($chunkText),
+            );
+
+            $results = $this->runner->runJson(
+                plan: $singlePlan,
+                messagesFactory: function (string $t) use ($targetMeta, $supportMeta, $customPrompt, $perChunkTarget, $perChunkMin, $chunkIndex, $chunksTotal) {
+                    return [
+                        [
+                            'role' => 'system',
+                            'content' => 'You extract compact grammar points for language learners. Return strict JSON only.',
+                        ],
+                        [
+                            'role' => 'user',
+                            'content' => $this->promptGrammar(
+                                text: $t,
+                                targetMeta: $targetMeta,
+                                supportMeta: $supportMeta,
+                                count: $perChunkTarget,
+                                minCount: $perChunkMin,
+                                chunkIndex: $chunkIndex,
+                                chunksTotal: $chunksTotal,
+                                customPrompt: $customPrompt,
+                            ),
+                        ],
+                    ];
+                },
+                options: $options,
+                logContext: $logContext + ['chunk' => $chunkIndex, 'chunks_total' => $chunksTotal],
+            );
+
+            foreach ($results as $r) {
+                $points = data_get($r, 'json.grammar_points');
+                if (!is_array($points)) continue;
+                foreach ($points as $p) {
+                    if (is_array($p)) $all[] = $p;
+                }
+            }
+
+            $merged = $this->normalizeGrammarPoints($all, $targetMeta, $supportMeta);
+
+            if (count($merged) >= $desiredTotal) {
+                return [
+                    'grammar_points' => array_slice($merged, 0, $desiredTotal),
+                    'exercises' => [],
+                ];
+            }
+        }
+
+        // Fallback: run once on full shrunk text requesting desiredTotal
+        $fallbackPlan = new ChunkPlan(
+            [$shrunk],
+            0,
+            0,
+            $this->wordCount($shrunk),
+            mb_strlen($shrunk),
+        );
+
+        $fallbackResults = $this->runner->runJson(
+            plan: $fallbackPlan,
+            messagesFactory: function (string $t) use ($targetMeta, $supportMeta, $customPrompt, $desiredTotal) {
+                return [
+                    [
+                        'role' => 'system',
+                        'content' => 'You extract compact grammar points for language learners. Return strict JSON only.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $this->promptGrammar(
+                            text: $t,
+                            targetMeta: $targetMeta,
+                            supportMeta: $supportMeta,
+                            count: $desiredTotal,
+                            minCount: 1,
+                            chunkIndex: 0,
+                            chunksTotal: 0,
+                            customPrompt: $customPrompt,
+                        ),
+                    ],
+                ];
+            },
+            options: $options,
+            logContext: $logContext + ['chunk' => 0, 'chunks_total' => 0, 'fallback' => true],
+        );
+
+        $more = [];
+        foreach ($fallbackResults as $r) {
+            $points = data_get($r, 'json.grammar_points');
+            if (!is_array($points)) continue;
+            foreach ($points as $p) {
+                if (is_array($p)) $more[] = $p;
+            }
+        }
+
+        $final = $this->normalizeGrammarPoints(array_merge($all, $more), $targetMeta, $supportMeta);
+
+        if (count($final) < 1) {
+            Log::warning('LessonGrammarService: empty/invalid grammar output', $logContext);
+            return [
+                'grammar_points' => [],
+                'exercises' => [],
+            ];
+        }
+
+        return [
+            'grammar_points' => array_slice($final, 0, $desiredTotal),
+            'exercises' => [],
+        ];
+    }
+
+    // ---------------------------
+    // Prompt
+    // ---------------------------
+
+    protected function translationLanguageGuard(array $supportMeta): string
+    {
+        $label = $supportMeta['label'];
+        $native = $supportMeta['native'];
+
+        return <<<TXT
+Language guard (STRICT):
+- All support-language fields MUST be written ONLY in {$label} ({$native}).
+- Support-language fields are: title, description, examples[].translation.
+- Do NOT include any words from other languages (even one word).
+- If you are not 100% sure, use an empty string for that field.
+TXT;
+    }
+
+    protected function promptGrammar(
+        string $text,
+        array $targetMeta,
+        array $supportMeta,
+        int $count,
+        int $minCount,
+        int $chunkIndex,
+        int $chunksTotal,
+        ?string $customPrompt
+    ): string {
+        $targetLabel = $targetMeta['label'];
+        $supportLabel = $supportMeta['label'];
+        $targetCode = $targetMeta['code'];
+        $supportCode = $supportMeta['code'];
+
+        $wc = $this->wordCount($text);
+
+        $chunkLine = $chunksTotal > 0
+            ? "Chunk: {$chunkIndex}/{$chunksTotal}"
+            : "Chunk: full text";
 
         $customBlock = '';
-        if ($customPrompt !== null && trim($customPrompt) !== '') {
-            $customBlock = "\n\nAdditional user preferences and instructions for grammar. Follow them only if they do not conflict with the JSON schema or the rules:\n" . $customPrompt . "\n";
+        if (is_string($customPrompt) && trim($customPrompt) !== '') {
+            $custom = trim($customPrompt);
+            $customBlock = <<<TXT
+
+Additional user preferences (follow ONLY if they do not conflict with schema/rules):
+{$custom}
+TXT;
         }
 
-        $userContent = <<<EOT
+        $guard = $this->translationLanguageGuard($supportMeta);
+
+        return <<<TXT
 Extract ONLY the most important grammar points from this {$targetLabel} lesson in a compact, UI-friendly way.
 
-Lesson language: {$targetLabel} ({$targetLanguage})
-Learner language: {$supportLabel} ({$supportLanguage})
-Approx length: {$wordCount} words
+Lesson language: {$targetLabel} ({$targetCode})
+Learner language: {$supportLabel} ({$supportCode})
+Approx length: {$wc} words
 
 Rules:
-- Return ONLY JSON. No extra text.
-- Choose exactly 1 or 2 grammar points (prefer 1 if the text is short or simple).
-- Keep each description short (max 3 short sentences).
-- Avoid academic language. Speak like a friendly tutor in {$supportLabel}.
+- Return ONLY JSON. No extra text. No markdown.
+- Choose EXACTLY {$count} grammar point(s). If truly impossible, return as many as possible but at least {$minCount}.
+- Keep it simple: speak like a friendly tutor in {$supportLabel}.
 - Each grammar point must include:
-  - WHEN we use it (real-life)
-  - HOW we build it (structure)
-  - ONE common mistake
-- Provide exactly 2 examples:
+  1) WHEN we use it (real-life)
+  2) HOW we build it (structure)
+  3) ONE common mistake
+- Keep description short (max 3 short sentences).
+- Provide EXACTLY 2 examples:
   - One close to the lesson (source="lesson")
   - One simple extra example (source="extra")
-- Examples must be in {$targetLabel}, translations in {$supportLabel}.
-- No exercises at all.
+- Examples: sentence in {$targetLabel}, translation in {$supportLabel}.
+- NO exercises at all.
+
+{$guard}
 
 Return JSON with this exact shape:
 
@@ -87,90 +302,80 @@ Return JSON with this exact shape:
   "exercises": []
 }
 
+{$customBlock}
+
+{$chunkLine}
+
 Lesson text:
-{$plainText}
-EOT;
+{$text}
+TXT;
+    }
 
-        $base = rtrim((string) config('services.openai.base', 'https://api.openai.com/v1'), '/');
-        $endpoint = $base . '/chat/completions';
+    // ---------------------------
+    // Options / policies
+    // ---------------------------
 
-        $payload = [
-            'model' => config('services.openai.chat_model', 'gpt-4.1-mini'),
-            'messages' => [
-                [
-                    'role' => 'system',
-                    'content' => 'You extract compact grammar points for language learners and return strict JSON only.',
-                ],
-                [
-                    'role' => 'user',
-                    'content' => $userContent,
-                ],
-            ],
-            'response_format' => ['type' => 'json_object'],
-            'max_tokens' => (int) config('services.openai.grammar_max_tokens', 900),
-            'temperature' => 0.2,
-        ];
+    protected function llmOptionsForGrammar(string $provider): array
+    {
+        $responseFormat = ['type' => 'json_object'];
 
-        try {
-            $response = Http::withToken(config('services.openai.key'))
-                ->timeout((int) config('services.openai.grammar_timeout', 45))
-                ->connectTimeout((int) config('services.openai.grammar_connect_timeout', 10))
-                ->retry(1, 800)
-                ->post($endpoint, $payload)
-                ->throw()
-                ->json();
-        } catch (Throwable $e) {
-            Log::error('LessonGrammarService: request failed', [
-                'lesson_id' => $lesson->id ?? null,
-                'exception' => get_class($e),
-                'message' => $e->getMessage(),
-            ]);
-            report($e);
-
+        if ($provider === 'azure') {
             return [
-                'grammar_points' => [],
-                'exercises' => [],
+                // IMPORTANT: in Azure v1, "model" = deployment name
+                'model' => (string) config('services.openai.azure_deployment_grammar', config('services.openai.azure_deployment_words')),
+                'azure_use_v1' => (bool) config('services.openai.azure_use_v1', true),
+                'azure_api_version' => (string) config('services.openai.azure_api_version'),
+
+                // One unified key that your OpenAiLlmClient consumes:
+                'max_output_tokens' => (int) config('services.openai.grammar_max_completion_tokens', 900),
+
+                // Avoid non-default temp for Azure/o* models
+                'temperature' => null,
+
+                'response_format' => $responseFormat,
             ];
         }
-
-        $content = $response['choices'][0]['message']['content'] ?? '{}';
-        $data = json_decode($content, true);
-
-        if (! is_array($data)) {
-            Log::warning('LessonGrammarService: invalid json', [
-                'lesson_id' => $lesson->id ?? null,
-                'content_head' => mb_substr((string) $content, 0, 900),
-            ]);
-
-            return [
-                'grammar_points' => [],
-                'exercises' => [],
-            ];
-        }
-
-        $grammarPoints = $data['grammar_points'] ?? [];
-
-        if (! is_array($grammarPoints)) {
-            $grammarPoints = [];
-        }
-
-        $grammarPoints = $this->normalizeGrammarPoints($grammarPoints, $targetLabel, $supportLabel);
 
         return [
-            'grammar_points' => $grammarPoints,
-            'exercises' => [],
+            'model' => (string) config('services.openai.chat_model', 'gpt-4.1-mini'),
+            'max_output_tokens' => (int) config('services.openai.grammar_max_tokens', 900),
+            'temperature' => 0.2,
+            'response_format' => $responseFormat,
         ];
     }
 
-    protected function normalizeGrammarPoints(array $points, string $targetLabel, string $supportLabel): array
+    protected function grammarChunkPolicy(): ChunkPolicy
+    {
+        if (method_exists(ChunkPolicy::class, 'forGrammar')) {
+            return ChunkPolicy::forGrammar();
+        }
+
+        $target = (int) config('services.openai.grammar_chunk_target_words', config('services.openai.words_chunk_target_words', 450));
+        $overlap = (int) config('services.openai.grammar_chunk_overlap_words', config('services.openai.words_chunk_overlap_words', 12));
+        $maxChunks = (int) config('services.openai.grammar_chunk_max_chunks', config('services.openai.words_chunk_max_chunks', 6));
+        $budget = (int) config('services.openai.grammar_time_budget_ms', config('services.openai.words_time_budget_ms', 55000));
+
+        return new ChunkPolicy($target, $overlap, $maxChunks, $budget);
+    }
+
+    protected function desiredGrammarPointCount(int $wordCount): int
+    {
+        // Rule you wanted: 1 or 2 (prefer 1 if short/simple)
+        if ($wordCount <= 350) return 1;
+        return 2;
+    }
+
+    // ---------------------------
+    // Normalization / validation
+    // ---------------------------
+
+    protected function normalizeGrammarPoints(array $points, array $targetMeta, array $supportMeta): array
     {
         $out = [];
         $seen = [];
 
         foreach ($points as $p) {
-            if (! is_array($p)) {
-                continue;
-            }
+            if (!is_array($p)) continue;
 
             $id = trim((string) ($p['id'] ?? ''));
             $title = trim((string) ($p['title'] ?? ''));
@@ -181,28 +386,30 @@ EOT;
                 continue;
             }
 
-            $key = mb_strtolower($id);
-            if (isset($seen[$key])) {
+            // Support-language guard (heuristic). If it fails badly, drop point.
+            if (!$this->supportTextLooksValid($title, $supportMeta['code']) || !$this->supportTextLooksValid($description, $supportMeta['code'])) {
                 continue;
             }
+
+            $key = $this->normalizeGrammarIdKey($id);
+            if (isset($seen[$key])) continue;
             $seen[$key] = true;
 
             $examples = $p['examples'] ?? [];
-            if (! is_array($examples)) {
-                $examples = [];
-            }
+            if (!is_array($examples)) $examples = [];
 
             $examplesOut = [];
             foreach ($examples as $ex) {
-                if (! is_array($ex)) {
-                    continue;
-                }
+                if (!is_array($ex)) continue;
 
                 $sentence = trim((string) ($ex['sentence'] ?? ''));
                 $translation = trim((string) ($ex['translation'] ?? ''));
-                $source = (string) ($ex['source'] ?? '');
+                $source = (string) ($ex['source'] ?? 'extra');
 
-                if ($sentence === '' || $translation === '') {
+                if ($sentence === '') continue;
+
+                // Translation is required by schema; if invalid language, drop the example
+                if ($translation === '' || !$this->supportTextLooksValid($translation, $supportMeta['code'])) {
                     continue;
                 }
 
@@ -217,19 +424,19 @@ EOT;
                 ];
             }
 
+            // Must have exactly 2 examples (lesson + extra ideally)
             if (count($examplesOut) < 2) {
                 continue;
             }
 
+            // Keep at most 2, and try to prioritize lesson+extra mix
+            $examplesOut = $this->pickBestTwoExamples($examplesOut);
+
             $level = $p['level'] ?? null;
-            if (! is_string($level) || trim($level) === '') {
-                $level = null;
-            }
+            if (!is_string($level) || trim($level) === '') $level = null;
 
             $meta = $p['meta'] ?? null;
-            if (! is_array($meta)) {
-                $meta = null;
-            }
+            if (!is_array($meta)) $meta = null;
 
             $out[] = [
                 'id' => $id,
@@ -237,7 +444,7 @@ EOT;
                 'level' => $level,
                 'description' => $description,
                 'pattern' => $pattern,
-                'examples' => array_slice($examplesOut, 0, 2),
+                'examples' => $examplesOut,
                 'meta' => $meta,
             ];
         }
@@ -245,21 +452,115 @@ EOT;
         return array_slice($out, 0, 2);
     }
 
-    protected function labelForLanguage(string $code): string
+    protected function pickBestTwoExamples(array $examples): array
     {
-        return match (strtolower($code)) {
-            'fa', 'fas', 'per' => 'Persian (Farsi)',
-            'nl', 'nld', 'dut' => 'Dutch',
-            'en', 'eng' => 'English',
-            'de', 'ger' => 'German',
-            'fr' => 'French',
-            'es' => 'Spanish',
-            'it' => 'Italian',
-            'pt' => 'Portuguese',
-            'ru' => 'Russian',
-            'tr' => 'Turkish',
-            'ar' => 'Arabic',
-            default => 'the target language',
-        };
+        $lesson = null;
+        $extra = null;
+
+        foreach ($examples as $ex) {
+            if (($ex['source'] ?? '') === 'lesson' && $lesson === null) $lesson = $ex;
+            if (($ex['source'] ?? '') === 'extra' && $extra === null) $extra = $ex;
+        }
+
+        if ($lesson && $extra) return [$lesson, $extra];
+
+        return array_slice($examples, 0, 2);
+    }
+
+    protected function normalizeGrammarIdKey(string $id): string
+    {
+        $t = mb_strtolower(trim($id));
+        $t = preg_replace('/[^\p{L}\p{N}\s_-]+/u', '', $t) ?? $t;
+        $t = preg_replace('/\s+/u', '_', $t) ?? $t;
+        return trim($t);
+    }
+
+    protected function supportTextLooksValid(string $text, string $supportCode): bool
+    {
+        $text = trim($text);
+        if ($text === '') return false;
+
+        $code = strtolower(trim($supportCode));
+
+        // If support is NOT Arabic-script, forbid Arabic script
+        if (!in_array($code, ['fa', 'ar', 'ur'], true)) {
+            if (preg_match('/\p{Arabic}/u', $text)) return false;
+        }
+
+        // For Persian: try to reject strongly Arabic-looking sentences
+        if ($code === 'fa') {
+            $arabicMarkers = ['ة', 'ى', 'ً', 'ٌ', 'ٍ', 'َ', 'ُ', 'ِ', 'ّ', 'ْ'];
+            $hits = 0;
+
+            foreach ($arabicMarkers as $m) {
+                if (str_contains($text, $m)) $hits++;
+            }
+
+            $arabicWords = [' كانت ', ' كان ', ' التي ', ' الذي ', ' هذا ', ' هذه ', ' على ', ' إلى ', ' من ', ' في ', ' و '];
+            foreach ($arabicWords as $w) {
+                if (str_contains(' ' . $text . ' ', $w)) $hits++;
+            }
+
+            if ($hits >= 2) return false;
+        }
+
+        return true;
+    }
+
+    // ---------------------------
+    // Text helpers
+    // ---------------------------
+
+    protected function normalizeText(string $htmlOrText): string
+    {
+        $t = strip_tags($htmlOrText);
+        $t = html_entity_decode($t, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $t = trim((string) preg_replace('/\s+/u', ' ', $t));
+        return $t;
+    }
+
+    protected function wordCount(string $text): int
+    {
+        $t = trim((string) preg_replace('/\s+/u', ' ', $text));
+        if ($t === '') return 0;
+        $parts = preg_split('/\s+/u', $t);
+        return is_array($parts) ? count($parts) : 0;
+    }
+
+    protected function shrinkText(string $text, int $maxChars): string
+    {
+        $t = trim((string) preg_replace('/\s+/u', ' ', $text));
+
+        if ($maxChars <= 0) return $t;
+        if (mb_strlen($t) <= $maxChars) return $t;
+
+        $half = (int) floor($maxChars / 2);
+        $head = mb_substr($t, 0, $half);
+        $tail = mb_substr($t, -$half);
+
+        return $head . "\n...\n" . $tail;
+    }
+
+    protected function langMeta(string $code): array
+    {
+        $code = strtolower(trim($code));
+        $supported = (array) config('learning_languages.supported', []);
+        $meta = $supported[$code] ?? null;
+
+        if (!is_array($meta)) {
+            return [
+                'code' => $code,
+                'label' => $code,
+                'native' => $code,
+                'direction' => 'ltr',
+            ];
+        }
+
+        return [
+            'code' => $code,
+            'label' => (string) ($meta['label'] ?? $code),
+            'native' => (string) ($meta['native'] ?? $code),
+            'direction' => (string) ($meta['direction'] ?? 'ltr'),
+        ];
     }
 }

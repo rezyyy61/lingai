@@ -108,23 +108,6 @@ const handleSubmit = async () => {
                {{ errorMessage }}
            </div>
 
-           <div class="space-y-4">
-              <!-- Textarea -->
-               <div class="space-y-1.5">
-                  <label class="text-xs font-semibold text-[var(--app-text-muted)] ml-1 flex items-center gap-1">
-                     Custom Prompt
-                     <Icon icon="solar:magic-stick-3-linear" class="h-3 w-3" />
-                  </label>
-                  <textarea
-                    v-model="form.customPrompt"
-                    rows="4"
-                    placeholder="E.g. Focus on business negotiation phrases, B2 level..."
-                    class="w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] px-4 py-3 text-sm text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] outline-none focus:border-[var(--app-accent)] focus:ring-2 focus:ring-[var(--app-accent-soft)] transition-all resize-none"
-                  ></textarea>
-               </div>
-           </div>
-
-           <!-- Toggles -->
            <div class="flex flex-col gap-2 rounded-2xl bg-[var(--app-panel-muted)] p-4 border border-[var(--app-border)]">
               <label class="flex items-center justify-between cursor-pointer group">
                  <span class="text-sm font-medium text-[var(--app-text)]">Replace existing sentences</span>

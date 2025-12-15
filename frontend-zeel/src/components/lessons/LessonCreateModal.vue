@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed } from 'vue'
-import { createLesson, createLessonFromAudio, createLessonFromYoutube } from '@/api/lessonApi'
+import { createLesson, createLessonFromYoutube } from '@/api/lessonApi'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps<{
@@ -13,7 +13,7 @@ const emit = defineEmits<{
   created: [lessonId: number]
 }>()
 
-const activeTab = ref<'text' | 'youtube' | 'audio'>('text')
+const activeTab = ref<'text' | 'youtube'>('text')
 
 const textForm = reactive({
   title: '',
@@ -29,19 +29,11 @@ const youtubeForm = reactive({
   tags: '',
 })
 
-const audioForm = reactive({
-  title: '',
-  level: '',
-  tags: '',
-  file: null as File | null,
-})
-
 const textLoading = ref(false)
 const youtubeLoading = ref(false)
-const audioLoading = ref(false)
 const errorMessage = ref('')
 
-const isLoading = computed(() => textLoading.value || youtubeLoading.value || audioLoading.value)
+const isLoading = computed(() => textLoading.value || youtubeLoading.value)
 
 const resetForms = () => {
   textForm.title = ''
@@ -53,11 +45,6 @@ const resetForms = () => {
   youtubeForm.title = ''
   youtubeForm.level = ''
   youtubeForm.tags = ''
-
-  audioForm.title = ''
-  audioForm.level = ''
-  audioForm.tags = ''
-  audioForm.file = null
 
   errorMessage.value = ''
   activeTab.value = 'text'
@@ -140,48 +127,6 @@ const handleYoutubeSubmit = async () => {
     youtubeLoading.value = false
   }
 }
-
-const fileInput = ref<HTMLInputElement | null>(null)
-
-const triggerFileInput = () => {
-  fileInput.value?.click()
-}
-
-const handleAudioSubmit = async () => {
-  if (audioLoading.value) return
-  if (!props.workspaceId) {
-    errorMessage.value = 'Workspace is missing.'
-    return
-  }
-  if (!audioForm.file) {
-    errorMessage.value = 'Please choose an audio file'
-    return
-  }
-
-  errorMessage.value = ''
-  audioLoading.value = true
-  try {
-    const lesson = await createLessonFromAudio(props.workspaceId, {
-      file: audioForm.file,
-      title: audioForm.title || undefined,
-      level: audioForm.level || undefined,
-      tags: parseTags(audioForm.tags),
-      language: 'en',
-    })
-    resetForms()
-    emit('created', lesson.id)
-
-    // Reset file input
-    if (fileInput.value) {
-      fileInput.value.value = ''
-    }
-  } catch (error) {
-    errorMessage.value = 'Failed to create audio lesson'
-    console.error(error)
-  } finally {
-    audioLoading.value = false
-  }
-}
 </script>
 
 <template>
@@ -215,7 +160,7 @@ const handleAudioSubmit = async () => {
         <div class="px-6 pb-4">
            <div class="flex p-1 gap-1 rounded-2xl bg-[var(--app-panel-muted)] border border-[var(--app-border)]">
               <button
-                 v-for="tab in ['text', 'youtube', 'audio']"
+                 v-for="tab in ['text', 'youtube']"
                  :key="tab"
                  @click="activeTab = tab as any"
                  class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all relative overflow-hidden"
@@ -224,8 +169,7 @@ const handleAudioSubmit = async () => {
                     : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)] hover:bg-[var(--app-surface)]/50'"
               >
                   <Icon v-if="tab === 'text'" icon="solar:document-text-bold-duotone" class="h-4 w-4 opacity-80" />
-                  <Icon v-else-if="tab === 'youtube'" icon="solar:play-circle-bold-duotone" class="h-4 w-4 opacity-80" />
-                  <Icon v-else icon="solar:file-audio-bold-duotone" class="h-4 w-4 opacity-80" />
+                  <Icon v-else icon="solar:play-circle-bold-duotone" class="h-4 w-4 opacity-80" />
                   <span class="capitalize">{{ tab }}</span>
               </button>
            </div>
@@ -292,13 +236,19 @@ const handleAudioSubmit = async () => {
               </form>
 
               <!-- Youtube Form -->
-              <form v-else-if="activeTab === 'youtube'" key="youtube" @submit.prevent="handleYoutubeSubmit" class="space-y-6 pt-2">
-                 <div class="rounded-2xl bg-[var(--app-panel-muted)] border border-[var(--app-border)] p-6 text-center space-y-2">
+              <form v-else key="youtube" @submit.prevent="handleYoutubeSubmit" class="space-y-6 pt-2">
+                 <div class="rounded-2xl bg-[var(--app-panel-muted)] border border-[var(--app-border)] p-4 text-center space-y-2">
                      <div class="mx-auto h-12 w-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 dark:bg-red-900/20 dark:text-red-400">
                         <Icon icon="solar:play-circle-bold" class="h-6 w-6" />
                      </div>
                      <p class="text-sm font-medium text-[var(--app-text)]">YouTube Import</p>
-                     <p class="text-xs text-[var(--app-text-muted)]">We'll fetch the transcript and generate exercises.</p>
+                     
+                     <div class="mt-2 flex items-start gap-2 rounded-xl bg-[var(--app-surface)] p-3 text-left text-xs text-[var(--app-text-muted)] border border-[var(--app-border)]">
+                        <Icon icon="solar:info-circle-bold" class="h-4 w-4 shrink-0 mt-0.5 text-[var(--app-accent)]" />
+                        <p>
+                           Please ensure the video has <strong>active captions/subtitles (CC)</strong>. Auto-generated captions may work but manual subtitles are best.
+                        </p>
+                     </div>
                  </div>
 
                  <div class="space-y-4">
@@ -339,67 +289,6 @@ const handleAudioSubmit = async () => {
                  >
                     <Icon v-if="youtubeLoading" icon="svg-spinners:90-ring-with-bg" class="h-5 w-5" />
                     <span v-else>Import Video</span>
-                 </button>
-              </form>
-
-              <!-- Audio Form -->
-              <form v-else key="audio" @submit.prevent="handleAudioSubmit" class="space-y-6 pt-2">
-                 <div 
-                   @click="triggerFileInput"
-                   class="group cursor-pointer rounded-2xl border-2 border-dashed border-[var(--app-border)] bg-[var(--app-panel-muted)] p-8 text-center transition-all hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)]"
-                   :class="audioForm.file ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)]' : ''"
-                 >
-                     <div class="mx-auto h-12 w-12 rounded-full bg-[var(--app-surface-elevated)] flex items-center justify-center text-[var(--app-accent)] shadow-sm mb-3 group-hover:scale-110 transition-transform">
-                        <Icon v-if="audioForm.file" icon="solar:music-note-bold" class="h-6 w-6" />
-                        <Icon v-else icon="solar:upload-track-bold-duotone" class="h-6 w-6" />
-                     </div>
-                     
-                     <div v-if="audioForm.file">
-                        <p class="text-sm font-semibold text-[var(--app-text)] truncate max-w-[200px] mx-auto">{{ audioForm.file.name }}</p>
-                        <p class="text-xs text-[var(--app-text-muted)] mt-1">Click to change file</p>
-                     </div>
-                     <div v-else>
-                        <p class="text-sm font-medium text-[var(--app-text)]">Click to upload audio</p>
-                        <p class="text-xs text-[var(--app-text-muted)] mt-1">MP3, WAV, M4A supported</p>
-                     </div>
-                     
-                     <input
-                       ref="fileInput"
-                       type="file"
-                       accept="audio/*"
-                       class="hidden"
-                       @change="(e) => (audioForm.file = (e.target as HTMLInputElement).files?.[0] ?? null)"
-                     />
-                 </div>
-
-                 <div class="flex gap-3">
-                    <div class="w-1/3">
-                       <select v-model="audioForm.level" class="zee-input cursor-pointer appearance-none">
-                          <option value="" disabled selected>Level</option>
-                          <option value="">Any</option>
-                          <option value="A2">A2</option>
-                          <option value="B1">B1</option>
-                          <option value="B2">B2</option>
-                          <option value="C1">C1</option>
-                       </select>
-                    </div>
-                    <div class="flex-1">
-                       <input
-                         v-model="audioForm.tags"
-                         type="text"
-                         placeholder="Tags (optional)"
-                         class="zee-input"
-                       />
-                    </div>
-                 </div>
-
-                 <button
-                   type="submit"
-                   class="zee-btn w-full py-3.5 flex items-center justify-center gap-2"
-                   :disabled="audioLoading || !audioForm.file"
-                 >
-                    <Icon v-if="audioLoading" icon="svg-spinners:90-ring-with-bg" class="h-5 w-5" />
-                    <span v-else>Transcribe & Create</span>
                  </button>
               </form>
            </transition>

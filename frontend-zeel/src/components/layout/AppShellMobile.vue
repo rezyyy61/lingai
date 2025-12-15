@@ -9,11 +9,8 @@ import TopBar from './TopBar.vue'
 import Sidebar from './Sidebar.vue'
 import LessonCreateModal from '@/components/lessons/LessonCreateModal.vue'
 import LessonAnalysisPanel from '@/components/lessons/LessonAnalysisPanel.vue'
-import LessonTabFlashcards from '@/components/lessons/LessonTabFlashcards.vue'
-import LessonTabShadowing from '@/components/lessons/LessonTabShadowing.vue'
-import LessonGrammarTab from '@/components/lessons/LessonGrammarTab.vue'
-import LessonTabExercises from '@/components/lessons/LessonTabExercises.vue'
-import LessonTabNotes from '@/components/lessons/LessonTabNotes.vue'
+import LessonTabs from '@/components/lessons/LessonTabs.vue'
+import LessonResourceText from '@/components/lessons/LessonResourceText.vue'
 import { Icon } from '@iconify/vue'
 
 type LessonFilters = {
@@ -21,6 +18,8 @@ type LessonFilters = {
   level: string
   resource_type: string
 }
+
+const isMobile = ref(false)
 
 const route = useRoute()
 const router = useRouter()
@@ -47,28 +46,7 @@ const createModalOpen = ref(false)
 const loggingOut = ref(false)
 
 const activeMobileTab = ref<'lessons' | 'source' | 'practice'>('lessons')
-
-type PracticeTabId = 'flashcards' | 'shadowing' | 'grammar' | 'exercises' | 'notes'
-
-const activePracticeTab = ref<PracticeTabId>('flashcards')
-const isFlashcardsFullScreen = ref(false)
-
-const practiceTabs: { id: PracticeTabId; label: string; icon: string }[] = [
-  { id: 'flashcards', label: 'Flashcards', icon: 'solar:cards-bold-duotone' },
-  { id: 'shadowing', label: 'Shadowing', icon: 'solar:microphone-2-bold-duotone' },
-  { id: 'grammar', label: 'Grammar', icon: 'solar:book-2-bold-duotone' },
-  { id: 'exercises', label: 'Exercises', icon: 'solar:clipboard-list-bold-duotone' },
-  { id: 'notes', label: 'Notes', icon: 'solar:pen-new-round-bold-duotone' },
-]
-
-const setPracticeTab = (id: PracticeTabId) => {
-  activePracticeTab.value = id
-  if (id === 'flashcards') {
-    isFlashcardsFullScreen.value = true
-  } else {
-    isFlashcardsFullScreen.value = false
-  }
-}
+const isMenuOpen = ref(false)
 
 const workspaceId = computed<number | null>(() => {
   const raw = route.params.id
@@ -243,47 +221,90 @@ onBeforeUnmount(() => {
 <template>
   <div class="fixed inset-0 flex flex-col bg-[var(--app-bg)] text-slate-900 transition-colors duration-200 dark:text-slate-50 xl:hidden overflow-hidden">
     <!-- Mobile Header -->
-    <header class="sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)]/80 px-4 py-3 backdrop-blur-md dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/80">
-      <div class="flex items-center gap-3">
+    <!-- Mobile Header -->
+    <header class="sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)]/80 px-4 py-3 backdrop-blur-md dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/80 min-h-[60px]">
+      <div class="flex items-center gap-3 flex-1">
         <button
+          v-if="activeMobileTab !== 'lessons' || workspaceId"
           type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--app-surface-elevated)] text-[var(--app-text-muted)] transition hover:bg-[var(--app-border)] hover:text-[var(--app-text)]"
+          class="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--app-surface-elevated)] text-[var(--app-text-muted)] transition border border-[var(--app-border)] active:scale-95"
           @click="goBackToWorkspaces"
         >
           <Icon icon="solar:arrow-left-linear" class="h-5 w-5" />
         </button>
-        <h1 class="text-sm font-semibold text-[var(--app-text)] line-clamp-1 max-w-[150px]">
-          {{ selectedLesson?.title || 'Lessons' }}
-        </h1>
+        <div v-else class="h-9 w-9"></div> <!-- Spacer -->
       </div>
+
+      <h1 class="text-base font-bold text-[var(--app-text)] line-clamp-1 max-w-[200px] text-center flex-2 px-2">
+        {{ selectedLesson?.title || 'Lessons' }}
+      </h1>
       
-      <div class="flex items-center gap-2">
+      <div class="flex items-center justify-end gap-2 flex-1">
          <button
-          type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--app-accent)] text-white shadow-sm transition hover:scale-105 active:scale-95"
-          :disabled="!workspaceId"
-          @click="openCreateModal"
-        >
-          <Icon icon="solar:add-circle-bold" class="h-5 w-5" />
+            type="button"
+            class="flex h-9 w-9 items-center justify-center rounded-full transition border active:scale-95 relative"
+            :class="auth.user?.name ? 'bg-[var(--app-accent)] border-transparent text-white' : 'bg-[var(--app-surface-elevated)] border-[var(--app-border)] text-[var(--app-text)]'"
+            @click="isMenuOpen = !isMenuOpen"
+         >
+           <!-- Avatar or Menu Icon -->
+           <span v-if="auth.user?.name" class="text-xs font-bold">{{ auth.user?.name?.[0]?.toUpperCase() }}</span>
+           <Icon v-else icon="solar:hamburger-menu-linear" class="h-5 w-5" />
         </button>
-         <div class="h-8 w-[1px] bg-[var(--app-border)] mx-1"></div>
-         <!-- Simplified container for TopBar content -->
-         <TopBar
-            :theme="theme"
-            class="!p-0 !bg-transparent !border-0 !shadow-none"
-            @toggle-theme="toggleTheme"
-            @logout="handleLogout"
-            @toggle-sidebar="() => {}"
-          />
       </div>
     </header>
+
+    <!-- Menu Drawer/Dropdown -->
+    <transition name="fade">
+      <div v-if="isMenuOpen" class="fixed inset-0 z-50 flex flex-col" @click.self="isMenuOpen = false">
+        <div class="absolute inset-0 bg-black/20 backdrop-blur-sm" @click="isMenuOpen = false"></div>
+        <div class="absolute right-4 top-16 w-64 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-4 shadow-xl dark:border-[var(--app-border-dark)] dark:bg-[#1a1a1c] space-y-2 origin-top-right">
+            
+            <div class="mb-4 flex items-center gap-3 px-2">
+               <div class="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--app-accent)] text-white font-bold">
+                 {{ auth.user?.name?.[0]?.toUpperCase() || 'U' }}
+               </div>
+               <div class="overflow-hidden">
+                 <p class="truncate text-sm font-bold text-[var(--app-text)]">{{ auth.user?.name || 'User' }}</p>
+                 <p class="truncate text-xs text-[var(--app-text-muted)]">{{ auth.user?.email }}</p>
+               </div>
+            </div>
+
+            <div class="h-px bg-[var(--app-border)] my-2"></div>
+
+            <button
+               @click="toggleTheme"
+               class="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition hover:bg-[var(--app-surface)] text-[var(--app-text)]"
+            >
+              <span>Msg Theme</span>
+              <Icon :icon="theme === 'light' ? 'solar:sun-bold' : 'solar:moon-bold'" class="h-5 w-5" />
+            </button>
+
+            <button
+               @click="handleLogout"
+               class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-red-500 transition hover:bg-red-500/10"
+            >
+               <Icon icon="solar:logout-2-bold" class="h-5 w-5" />
+               Logout
+            </button>
+        </div>
+      </div>
+    </transition>
 
     <!-- Main Content Area -->
     <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-28 overscroll-contain">
       
       <!-- Lessons Tab -->
       <transition name="fade" mode="out-in">
-        <div v-if="activeMobileTab === 'lessons'" key="lessons" class="pb-safe">
+        <div v-if="activeMobileTab === 'lessons'" key="lessons" class="pb-safe space-y-4">
+          <!-- Create Lesson Button (FAB-like or Banner) -->
+          <button
+            @click="openCreateModal"
+            class="flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--app-accent)] py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 active:scale-95 transition-transform"
+          >
+             <Icon icon="solar:add-circle-bold" class="h-5 w-5" />
+             New Lesson
+          </button>
+
           <Sidebar
             :lessons="lessons"
             :loading="lessonsLoading"
@@ -297,11 +318,12 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <!-- Source Tab -->
-        <div v-else-if="activeMobileTab === 'source'" key="source" class="space-y-4 pb-safe">
+        <!-- Source Tab (Fixed Height, Internal Scroll) -->
+        <div v-else-if="activeMobileTab === 'source'" key="source" class="h-full flex flex-col overflow-hidden pb-2">
              <template v-if="selectedLesson">
-               <section class="zee-card p-5">
-                 <div class="mb-4 flex items-center gap-2">
+               <!-- Header Info (Fixed) -->
+               <section class="shrink-0 px-2 mb-4">
+                 <div class="mb-2 flex items-center gap-2">
                     <span class="rounded-full bg-[var(--app-accent-soft)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--app-accent-strong)]">
                       {{ selectedLesson.resource_type || 'Text' }}
                     </span>
@@ -310,21 +332,26 @@ onBeforeUnmount(() => {
                     </span>
                  </div>
                  
-                <h1 class="text-2xl font-bold leading-tight text-[var(--app-text)]">
+                <h1 class="text-xl font-bold leading-tight text-[var(--app-text)] line-clamp-2">
                   {{ selectedLesson.title }}
                 </h1>
-                
-                <p v-if="selectedLesson.short_description" class="mt-2 text-sm leading-relaxed text-[var(--app-text-muted)]">
-                   {{ selectedLesson.short_description }}
-                </p>
                </section>
 
-               <!-- Analysis Panel -->
-               <LessonAnalysisPanel
-                  :lesson="selectedLesson!"
-                  @updated="handleLessonUpdated"
-                  @toast="handleAnalysisToast"
-                />
+               <!-- Main Text Reader (Explicit Height for Mobile Constraint) -->
+               <LessonResourceText :lesson="selectedLesson" class="h-[calc(100dvh-220px)] mb-4" />
+
+               <!-- Analysis Panel (Fixed at bottom or scrollable? Let's make it fixed compact or allow user to see it separately?) -->
+               <!-- User emphasized TEext scrolling. We'll put analysis at bottom but it might be cramped. -->
+               <!-- Better UX: Scrollable container for Analysis? Or keep it below? -->
+               <!-- Let's try putting Analysis stacked below text first. -->
+               <div class="shrink-0 max-h-[150px] overflow-y-auto custom-scrollbar border-t border-[var(--app-border)] pt-2">
+                   <LessonAnalysisPanel
+                      :lesson="selectedLesson!"
+                      @updated="handleLessonUpdated"
+                      @toast="handleAnalysisToast"
+                      class="!rounded-xl !p-4 !shadow-none !border-0"
+                    />
+               </div>
             </template>
              <div v-else class="flex flex-col items-center justify-center py-20 text-center">
               <div class="mb-4 rounded-full bg-[var(--app-surface-elevated)] p-4 text-[var(--app-border-strong)]">
@@ -338,43 +365,10 @@ onBeforeUnmount(() => {
         </div>
         
         <!-- Practice Tab -->
-        <div v-else-if="activeMobileTab === 'practice'" key="practice" class="pb-safe">
+        <div v-else-if="activeMobileTab === 'practice'" key="practice" class="pb-safe h-full flex flex-col">
              <template v-if="selectedLesson">
-               <!-- Practice Mode Selector (Horizontal Scroll) -->
-               <div class="mb-6 -mx-4 px-4 overflow-x-auto no-scrollbar py-1">
-                 <div class="flex gap-3">
-                   <button 
-                      v-for="tab in practiceTabs" 
-                      :key="tab.id"
-                      @click="setPracticeTab(tab.id)"
-                      class="flex flex-shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition-all"
-                      :class="activePracticeTab === tab.id 
-                        ? 'bg-[var(--app-text)] text-[var(--app-bg)] border-[var(--app-text)]' 
-                        : 'bg-[var(--app-surface)] text-[var(--app-text-muted)] border-[var(--app-border)]'"
-                   >
-                     <Icon :icon="tab.icon" class="h-4 w-4" />
-                     {{ tab.label }}
-                   </button>
-                 </div>
-               </div>
-               
-               <!-- Practice Content -->
-               <div class="pb-10">
-                  <LessonTabFlashcards v-if="activePracticeTab === 'flashcards'" :lesson-id="selectedLesson.id" />
-                   <LessonTabShadowing
-                    v-else-if="activePracticeTab === 'shadowing'"
-                    :lesson="selectedLesson"
-                  />
-                  <LessonGrammarTab
-                    v-else-if="activePracticeTab === 'grammar'"
-                    :lesson-id="selectedLesson.id"
-                  />
-                  <LessonTabExercises
-                    v-else-if="activePracticeTab === 'exercises'"
-                    :lesson-id="selectedLesson.id"
-                  />
-                  <LessonTabNotes v-else />
-               </div>
+               <!-- Unified Lesson Tabs (Studio Layout) -->
+               <LessonTabs :lesson="selectedLesson" class="h-full" />
              </template>
              
              <div v-else class="flex flex-col items-center justify-center py-20 text-center">
@@ -392,7 +386,7 @@ onBeforeUnmount(() => {
 
     <!-- Bottom Navigation Bar -->
     <nav class="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--app-border)] bg-[var(--app-surface)]/90 backdrop-blur-xl dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/90">
-      <div class="safe-area-bottom flex h-[calc(3.5rem+env(safe-area-inset-bottom))] items-start justify-around pt-2">
+      <div class="safe-area-bottom flex items-start justify-around">
         
         <button
           v-for="tab in [
@@ -460,8 +454,10 @@ onBeforeUnmount(() => {
 
 /* iOS Safe Area handling */
 .safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 20px);
-  height: calc(3.5rem + env(safe-area-inset-bottom, 20px));
+  padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 12px);
+  padding-top: 12px;
+  height: auto;
+  min-height: calc(4rem + env(safe-area-inset-bottom, 20px));
 }
 
 .pb-safe {

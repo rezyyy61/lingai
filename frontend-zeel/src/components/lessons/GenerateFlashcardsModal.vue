@@ -179,20 +179,6 @@ const handleSubmit = async () => {
                      />
                   </div>
               </div>
-
-              <!-- Textareas -->
-               <div class="space-y-1.5">
-                  <label class="text-xs font-semibold text-[var(--app-text-muted)] ml-1 flex items-center gap-1">
-                     Instructions
-                     <Icon icon="solar:info-circle-linear" class="h-3 w-3" />
-                  </label>
-                  <textarea
-                    v-model="form.notes"
-                    rows="2"
-                    placeholder="Focus on specific vocabulary..."
-                    class="w-full rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] px-4 py-3 text-sm text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] outline-none focus:border-[var(--app-accent)] focus:ring-2 focus:ring-[var(--app-accent-soft)] transition-all resize-none"
-                  ></textarea>
-               </div>
            </div>
 
            <!-- Toggles -->

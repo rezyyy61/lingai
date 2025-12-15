@@ -64,7 +64,7 @@ services:
     container_name: zeel_queue
     restart: unless-stopped
     working_dir: /var/www/html
-    command: php artisan queue:work --verbose --tries=3 --timeout=90
+    command: php artisan queue:work --verbose --tries=3 --timeout=240
     volumes:
       - .:/var/www/html
       - ./storage/yt-dlp/youtube-cookies.txt:/cookies/youtube-cookies.txt:ro

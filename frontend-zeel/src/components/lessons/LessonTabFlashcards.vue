@@ -176,7 +176,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
     <!-- Minimal header (hidden in focus mode) -->
     <div
       v-if="!isFocusMode"
-      class="flex items-center justify-between gap-3 px-1"
+      class="flex items-center justify-between gap-3 px-1 pb-2 shrink-0"
     >
       <div class="space-y-0.5">
         <p class="text-xs font-semibold font-display tracking-wide uppercase text-[var(--app-accent)]">
@@ -223,7 +223,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
       {{ toastMessage }}
     </div>
 
-    <div class="mt-4 flex flex-1 flex-col items-center justify-center gap-6 sm:gap-8 relative">
+    <div class="flex flex-1 flex-col items-center justify-center gap-3 sm:gap-8 relative overflow-hidden">
       <Transition name="fade-scale" mode="out-in">
         <div v-if="isError" class="flex flex-col items-center gap-3 text-sm text-red-500" key="error">
           <p>Something went wrong loading flashcards.</p>
@@ -297,7 +297,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
 
         <div
           v-else-if="isReady && currentCard"
-          class="relative flex w-full flex-1 flex-col items-center justify-center"
+          class="relative flex w-full flex-1 flex-col items-center justify-center min-h-0"
           key="active"
         >
           <!-- exit focus button -->

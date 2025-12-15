@@ -4,13 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\LessonWord;
-use App\Services\OpenAI\OpenAiAudioService;
+use App\Services\AzureSpeech\AzureSpeechTtsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class LessonWordTtsController extends Controller
 {
-    public function show(Request $request, LessonWord $word, OpenAiAudioService $tts)
+    public function show(Request $request, LessonWord $word, AzureSpeechTtsService $tts)
     {
         if ($word->tts_audio_path && Storage::disk('public')->exists($word->tts_audio_path)) {
             return response()->json([
@@ -29,7 +29,7 @@ class LessonWordTtsController extends Controller
         $language = optional($word->lesson)->target_language
             ?? config('learning_languages.default_target', 'en');
 
-        $url = $tts->synthesizeSpeech($text, $language);
+        $url = $tts->synthesizeShadowing($text, $language);
 
         $publicPath = parse_url($url, PHP_URL_PATH);
         $relative = ltrim(str_replace('/storage/', '', $publicPath), '/');
