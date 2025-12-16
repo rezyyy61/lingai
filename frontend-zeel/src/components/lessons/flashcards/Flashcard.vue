@@ -65,7 +65,7 @@ async function handlePlayClick(event: MouseEvent) {
 <template>
   <div class="relative flex items-center justify-center w-full py-4 perspective-1000">
     <div
-      class="relative h-[55vh] w-auto aspect-[3/4.2] max-w-full sm:h-auto sm:w-full sm:max-w-md sm:aspect-[3/4] cursor-pointer select-none transition-transform duration-500 [transform-style:preserve-3d]"
+      class="relative w-full max-w-[340px] aspect-[3/4.2] max-h-[70vh] sm:h-[55vh] sm:w-full sm:max-w-md sm:aspect-[3/4] cursor-pointer select-none transition-transform duration-500 [transform-style:preserve-3d]"
       :class="isFlipped ? 'rotate-y-180' : ''"
       @click="toggle"
     >

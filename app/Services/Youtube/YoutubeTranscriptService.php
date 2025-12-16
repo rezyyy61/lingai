@@ -85,15 +85,29 @@ class YoutubeTranscriptService
             $segments = $transcript->fetch();
 
             $parts = [];
+            $prevKey = null;
 
             foreach ($segments as $segment) {
-                $text = is_array($segment) ? ($segment['text'] ?? '') : '';
-                if ($text !== '') {
-                    $parts[] = $text;
+                $raw = is_array($segment) ? (string) ($segment['text'] ?? '') : '';
+                if ($raw === '') {
+                    continue;
                 }
+
+                $clean = $this->cleanCaptionChunk($raw);
+                if ($clean === '') {
+                    continue;
+                }
+
+                $key = $this->dedupeKey($clean);
+                if ($prevKey !== null && $key === $prevKey) {
+                    continue;
+                }
+
+                $prevKey = $key;
+                $parts[] = $clean;
             }
 
-            $text = trim(implode(' ', $parts));
+            $text = $this->finalSanitizeTranscript(trim(implode(' ', $parts)));
 
             if ($text !== '') {
                 return $text;
@@ -260,6 +274,7 @@ class YoutubeTranscriptService
 
         $raw = @file_get_contents($vttPath);
         $text = $this->vttToPlainText((string) $raw);
+        $text = $this->finalSanitizeTranscript($text);
 
         $maxChars = (int) config('services.youtube_transcript.yt_dlp_max_chars', 60000);
         if ($maxChars > 0 && mb_strlen($text) > $maxChars) {
@@ -300,6 +315,7 @@ class YoutubeTranscriptService
 
         $lines = preg_split("/\r\n|\n|\r/", $vtt) ?: [];
         $out = [];
+        $prevKey = null;
 
         foreach ($lines as $line) {
             $line = trim((string) $line);
@@ -318,15 +334,22 @@ class YoutubeTranscriptService
 
             $line = preg_replace('/<[^>]+>/', '', $line) ?? $line;
             $line = preg_replace('/\{\\an\d+\}/', '', $line) ?? $line;
-            $line = trim((string) preg_replace('/\s+/', ' ', $line));
 
-            if ($line !== '') {
-                $out[] = $line;
+            $line = $this->cleanCaptionChunk($line);
+            if ($line === '') {
+                continue;
             }
+
+            $key = $this->dedupeKey($line);
+            if ($prevKey !== null && $key === $prevKey) {
+                continue;
+            }
+
+            $prevKey = $key;
+            $out[] = $line;
         }
 
-        $text = trim(implode(' ', $out));
-        $text = trim((string) preg_replace('/\s+/', ' ', $text));
+        $text = $this->finalSanitizeTranscript(trim(implode(' ', $out)));
 
         return $text;
     }
@@ -445,4 +468,39 @@ class YoutubeTranscriptService
 
         Log::error('YoutubeTranscriptService: exception chain', $context + ['chain' => $chain]);
     }
+
+    protected function cleanCaptionChunk(string $s): string
+    {
+        $s = html_entity_decode($s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $s = trim($s);
+
+        // remove common bracket noise like [Music]
+        $s = preg_replace('/\[(music|applause|laughter|noise)\]/iu', ' ', $s) ?? $s;
+
+        // collapse whitespace
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
+
+        return trim($s);
+    }
+
+    protected function dedupeKey(string $s): string
+    {
+        $s = mb_strtolower($s);
+        // remove punctuation for stable comparison
+        $s = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $s) ?? $s;
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
+        return trim($s);
+    }
+
+    protected function finalSanitizeTranscript(string $text): string
+    {
+        $text = $this->cleanCaptionChunk($text);
+
+        // remove meta headers if they somehow appear
+        $text = preg_replace('/\bKind:\s*captions\b.*?\bLanguage:\s*[a-z-]+\b/iu', ' ', $text) ?? $text;
+        $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+
+        return trim($text);
+    }
+
 }

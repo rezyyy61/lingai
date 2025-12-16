@@ -172,7 +172,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
 </script>
 
 <template>
-  <section class="flex h-full flex-col text-[var(--app-text)]">
+  <section class="flex h-full w-full max-w-full flex-col overflow-x-hidden text-[var(--app-text)]">
     <!-- Minimal header (hidden in focus mode) -->
     <div
       v-if="!isFocusMode"
@@ -223,7 +223,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
       {{ toastMessage }}
     </div>
 
-    <div class="flex flex-1 flex-col items-center justify-center gap-3 sm:gap-8 relative overflow-hidden">
+    <div class="relative flex flex-1 w-full flex-col items-center justify-center gap-3 sm:gap-8 overflow-y-auto pt-2 pb-4 px-1">
       <Transition name="fade-scale" mode="out-in">
         <div v-if="isError" class="flex flex-col items-center gap-3 text-sm text-red-500" key="error">
           <p>Something went wrong loading flashcards.</p>
