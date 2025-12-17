@@ -107,4 +107,6 @@ return [
 
     'default_target' => 'en',
     'default_support' => 'en',
+    'default_level' => 'A1',
+    'supported_levels' => ['A1','A2','B1','B2','C1','C2'],
 ];

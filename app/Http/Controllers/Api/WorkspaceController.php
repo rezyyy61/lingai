@@ -30,7 +30,15 @@ class WorkspaceController extends Controller
             'description' => ['nullable', 'string'],
             'target_language' => ['nullable', 'string', 'max:10'],
             'support_language' => ['nullable', 'string', 'max:10'],
+            'target_level' => ['nullable', 'string', 'in:A1,A2,B1,B2,C1,C2'],
         ]);
+
+        $defaultLevel = config('learning_languages.default_level', 'A1');
+
+        $level = $data['target_level'] ?? $defaultLevel;
+        if (! in_array($level, ['A1','A2','B1','B2','C1','C2'], true)) {
+            $level = $defaultLevel;
+        }
 
         $supported = array_keys(config('learning_languages.supported', []));
         $defaultTarget = config('learning_languages.default_target', 'en');
@@ -62,6 +70,7 @@ class WorkspaceController extends Controller
             'description' => $data['description'] ?? null,
             'target_language' => $target,
             'support_language' => $support,
+            'target_level' => $level,
         ]);
 
         $workspace->members()->syncWithoutDetaching([

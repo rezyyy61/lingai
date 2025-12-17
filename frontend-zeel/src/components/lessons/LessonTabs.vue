@@ -14,33 +14,33 @@ const activeTab = ref<'flashcards' | 'shadowing' | 'grammar' | 'exercises' | 'no
 
 // Tools for the "Studio" section
 const tools = [
-  { 
-    id: 'flashcards', 
-    label: 'Flashcards', 
+  {
+    id: 'flashcards',
+    label: 'Flashcards',
     icon: 'solar:card-2-bold-duotone',
     color: 'text-orange-400',
     bg: 'bg-orange-400/10',
     border: 'border-orange-400/20'
   },
-  { 
-    id: 'shadowing', 
-    label: 'Audio', 
+  {
+    id: 'shadowing',
+    label: 'Audio',
     icon: 'solar:microphone-2-bold-duotone',
     color: 'text-blue-400',
     bg: 'bg-blue-400/10',
     border: 'border-blue-400/20'
   },
-  { 
-    id: 'grammar', 
-    label: 'Grammar', 
+  {
+    id: 'grammar',
+    label: 'Grammar',
     icon: 'solar:book-2-bold-duotone',
     color: 'text-purple-400',
     bg: 'bg-purple-400/10',
     border: 'border-purple-400/20'
   },
-  { 
-    id: 'exercises', 
-    label: 'Quiz', 
+  {
+    id: 'exercises',
+    label: 'Quiz',
     icon: 'solar:clipboard-list-bold-duotone',
     color: 'text-emerald-400',
     bg: 'bg-emerald-400/10',
@@ -59,7 +59,7 @@ const setActiveTab = (id: typeof activeTab.value) => {
   >
     <!-- Studio Header (Tabs) -->
     <div class="shrink-0 pb-2 md:pb-4 flex flex-col gap-4">
-      
+
       <!-- Desktop: Grid Layout -->
       <div class="hidden md:flex flex-col gap-4">
          <div class="grid grid-cols-4 gap-2">

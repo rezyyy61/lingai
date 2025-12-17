@@ -44,7 +44,7 @@ class LessonExerciseService
         $anchors = $this->buildAnchors($plainText, $wordsCompact, 18);
         $effectiveCount = $this->effectiveCount($plainText, $count, $anchors);
 
-        $minCount = max(6, min($effectiveCount, $effectiveCount - 1));
+        $minCount = max(6, (int) floor($effectiveCount * 0.85));
 
         $vocabMin = max(2, (int) floor($effectiveCount * 0.4));
         $grammarMin = max(2, (int) floor($effectiveCount * 0.35));
@@ -76,13 +76,14 @@ class LessonExerciseService
         ];
 
         $batch = $this->batchSize($effectiveCount, $provider);
-        $maxRounds = max(3, (int) ceil($effectiveCount / max(1, $batch)) + 4);
+        $maxRounds = max(4, (int) ceil($effectiveCount / max(1, $batch)) + 6);
 
         $raw = [];
+        $zeroAddedStreak = 0;
 
         for ($round = 1; $round <= $maxRounds; $round++) {
             $normalized = $this->dedupeExercises($this->normalizeExercises($raw, $targetMeta, $supportMeta, $anchors));
-            $selected = $this->selectBalanced($normalized, $effectiveCount, $vocabMin, $grammarMin, $anchors);
+            $selected = $this->selectBalanced($normalized, $effectiveCount, $vocabMin, $grammarMin, $anchors, null);
 
             if (count($selected) >= $effectiveCount) {
                 return array_slice($selected, 0, $effectiveCount);
@@ -160,12 +161,22 @@ class LessonExerciseService
             }
 
             if ($added === 0) {
-                break;
+                $zeroAddedStreak++;
+                if ($zeroAddedStreak >= 3) {
+                    break;
+                }
+                continue;
             }
+
+            $zeroAddedStreak = 0;
         }
 
         $normalized = $this->dedupeExercises($this->normalizeExercises($raw, $targetMeta, $supportMeta, $anchors));
-        $balanced = $this->selectBalanced($normalized, $effectiveCount, $vocabMin, $grammarMin, $anchors);
+        $balanced = $this->selectBalanced($normalized, $effectiveCount, $vocabMin, $grammarMin, $anchors, null);
+
+        if (count($balanced) < $minCount) {
+            $balanced = $this->selectBalanced($normalized, $effectiveCount, $vocabMin, $grammarMin, $anchors, 2);
+        }
 
         if (count($balanced) < $minCount) {
             Log::warning('LessonExerciseService: insufficient exercises', [
@@ -199,7 +210,7 @@ class LessonExerciseService
 
     protected function batchSize(int $count, string $provider): int
     {
-        $default = $provider === 'azure' ? 5 : 6;
+        $default = $provider === 'azure' ? 4 : 6;
         $v = (int) config('services.openai.exercises_batch_size', $default);
         $v = max(3, min(6, $v));
         return min($v, $count);
@@ -212,20 +223,20 @@ class LessonExerciseService
         if ($provider === 'azure') {
             return [
                 'model' => (string) config('services.openai.azure_deployment_exercises', config('services.openai.azure_deployment_words')),
-                'max_output_tokens' => (int) config('services.openai.exercises_max_completion_tokens', 900),
+                'max_output_tokens' => (int) config('services.openai.exercises_max_completion_tokens', 1400),
                 'temperature' => 0.2,
                 'response_format' => $responseFormat,
-                'timeout' => (int) config('services.openai.exercises_timeout', 60),
+                'timeout' => (int) config('services.openai.exercises_timeout', 70),
                 'connect_timeout' => (int) config('services.openai.exercises_connect_timeout', 10),
             ];
         }
 
         return [
             'model' => (string) config('services.openai.chat_model', 'gpt-4.1-mini'),
-            'max_output_tokens' => (int) config('services.openai.exercises_max_tokens', 1200),
+            'max_output_tokens' => (int) config('services.openai.exercises_max_tokens', 1400),
             'temperature' => 0.2,
             'response_format' => $responseFormat,
-            'timeout' => (int) config('services.openai.exercises_timeout', 60),
+            'timeout' => (int) config('services.openai.exercises_timeout', 70),
             'connect_timeout' => (int) config('services.openai.exercises_connect_timeout', 10),
         ];
     }
@@ -238,7 +249,7 @@ class LessonExerciseService
         return <<<TXT
 Language guard (STRICT):
 - Support-language fields MUST be ONLY {$label} ({$native}).
-- Support fields: instructions, solution_explanation, options[].explanation.
+- Support fields: solution_explanation.
 - If unsure, output empty string "".
 TXT;
     }
@@ -285,6 +296,7 @@ Minimums in this batch:
 
 CRITICAL anti-generic rule:
 Every exercise MUST be anchored to the lesson using ONE anchor from "Allowed anchors".
+No definitions. No general knowledge. No "What is ..." unless it references the anchor term in THIS lesson context.
 If an exercise is not anchored, do NOT create it.
 
 Hard rules:
@@ -294,21 +306,19 @@ Hard rules:
 - Exactly ONE option has is_correct=true (boolean)
 - question_prompt: {$targetLabel} only
 - options[].text: {$targetLabel} only
-- instructions: ALWAYS exactly "گزینه درست را انتخاب کنید."
 - solution_explanation: {$supportLabel} only, 1 short sentence, max ~110 chars
 - options[].explanation: ALWAYS empty string ""
 
 Quality rules:
 - Do NOT repeat or closely match anything in "Already have".
-- No generic questions like "What is a conversation?" unless it clearly references an anchor.
 - Vocabulary skill:
   - question_prompt MUST contain the exact anchor term in single quotes, e.g. What does 'small talk' mean?
-  - Ask meaning in THIS context.
+  - Ask meaning in THIS context (not a dictionary definition).
 - Grammar skill:
   - question_prompt MUST be fill-in-the-blank and contain ___
   - Options are the 3 possible fills.
 - Comprehension skill:
-  - Ask a concrete fact from the dialogue (who/what/why/where).
+  - Ask a concrete detail from the dialogue (who/what/why/where).
   - Must mention at least one anchor word/name.
 
 {$guard}
@@ -321,7 +331,6 @@ Schema:
       "skill": "vocabulary|grammar|comprehension",
       "difficulty": "easy|medium",
       "question_prompt": "",
-      "instructions": "گزینه درست را انتخاب کنید.",
       "solution_explanation": "",
       "options": [
         { "text": "", "is_correct": true, "explanation": "" }
@@ -383,15 +392,8 @@ TXT;
                 continue;
             }
 
-            if (! $this->questionIsAnchored($skill, $question, $anchors)) {
+            if (!$this->questionIsAnchored($skill, $question, $anchors)) {
                 continue;
-            }
-
-            $instructions = trim((string) ($ex['instructions'] ?? ''));
-            if ($instructions === '' || !$this->supportTextLooksValid($instructions, $supportMeta['code'])) {
-                $instructions = 'گزینه درست را انتخاب کنید.';
-            } else {
-                $instructions = 'گزینه درست را انتخاب کنید.';
             }
 
             $solution = trim((string) ($ex['solution_explanation'] ?? ''));
@@ -454,7 +456,6 @@ TXT;
                 'skill' => $skill,
                 'difficulty' => $difficulty,
                 'question_prompt' => $question,
-                'instructions' => $instructions,
                 'solution_explanation' => $solution,
                 'options' => $optionsOut,
                 'meta' => is_array($ex['meta'] ?? null) ? $ex['meta'] : null,
@@ -536,8 +537,8 @@ TXT;
     {
         $q = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $question) ?? $question));
         $texts = [];
-
         $correct = '';
+
         foreach ($options as $o) {
             if (!is_array($o)) {
                 continue;
@@ -546,10 +547,11 @@ TXT;
             if ($t === '') {
                 continue;
             }
-            $texts[] = mb_strtolower(preg_replace('/\s+/u', ' ', $t) ?? $t);
+            $t2 = mb_strtolower(preg_replace('/\s+/u', ' ', $t) ?? $t);
+            $texts[] = $t2;
 
             if (($o['is_correct'] ?? false) === true) {
-                $correct = mb_strtolower(preg_replace('/\s+/u', ' ', $t) ?? $t);
+                $correct = $t2;
             }
         }
 
@@ -558,7 +560,7 @@ TXT;
         return sha1(mb_strtolower($skill) . '|' . $q . '|' . implode('|', $texts) . '|' . $correct);
     }
 
-    protected function selectBalanced(array $exercises, int $count, int $vocabMin, int $grammarMin, array $anchors): array
+    protected function selectBalanced(array $exercises, int $count, int $vocabMin, int $grammarMin, array $anchors, ?int $anchorLimitOverride = null): array
     {
         $vocab = [];
         $grammar = [];
@@ -578,7 +580,9 @@ TXT;
         $selected = [];
         $usedAnchors = [];
 
-        $pushIfOk = function (array $ex) use (&$selected, &$usedAnchors, $anchors, $count) {
+        $anchorLimit = $anchorLimitOverride ?? (count($anchors) <= 14 ? 1 : 2);
+
+        $pushIfOk = function (array $ex) use (&$selected, &$usedAnchors, $anchors, $count, $anchorLimit) {
             if (count($selected) >= $count) {
                 return;
             }
@@ -586,9 +590,8 @@ TXT;
             $anchor = $this->inferAnchorFromQuestion((string) ($ex['skill'] ?? ''), (string) ($ex['question_prompt'] ?? ''), $anchors);
             if ($anchor !== null) {
                 $k = mb_strtolower($anchor);
-                $limit = count($anchors) <= 14 ? 1 : 2;
                 $usedAnchors[$k] = $usedAnchors[$k] ?? 0;
-                if ($usedAnchors[$k] >= $limit) {
+                if ($usedAnchors[$k] >= $anchorLimit) {
                     return;
                 }
                 $usedAnchors[$k]++;

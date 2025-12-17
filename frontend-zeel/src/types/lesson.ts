@@ -130,6 +130,7 @@ export interface LessonDetail extends Lesson {
   words: LessonWord[]
   sentences: LessonSentence[]
   exercises: LessonExercise[]
+  language_code?: string | null
   analysis_overview?: string | null
   analysis_grammar?: string | null
   analysis_vocabulary?: string | null
@@ -144,4 +145,23 @@ export interface PaginatedLessons {
     last_page: number
     total: number
   }
+}
+
+export interface LessonDialogueItem {
+  speaker: string
+  text: string
+}
+
+export interface LessonPack {
+  title: string
+  lesson_text: string
+  dialogue: LessonDialogueItem[]
+  key_phrases: string[]
+  quick_questions: string[]
+  tags: string[]
+  meta?: any
+}
+
+export interface LessonDetail extends Lesson {
+  lesson_pack?: LessonPack | null
 }

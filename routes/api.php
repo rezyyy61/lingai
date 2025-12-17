@@ -6,10 +6,12 @@ use App\Http\Controllers\Api\LessonExerciseController;
 use App\Http\Controllers\Api\LessonFromAudioController;
 use App\Http\Controllers\Api\LessonFromYoutubeController;
 use App\Http\Controllers\Api\LessonGrammarController;
+use App\Http\Controllers\Api\LessonReadAloudController;
 use App\Http\Controllers\Api\LessonSentenceController;
 use App\Http\Controllers\Api\LessonSentenceTtsController;
 use App\Http\Controllers\Api\LessonWordController;
 use App\Http\Controllers\Api\LessonWordTtsController;
+use App\Http\Controllers\Api\SpeakingPracticeController;
 use App\Http\Controllers\Api\WorkspaceController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
         'store',
         'destroy',
     ]);
+    Route::post('/workspaces/{workspace}/lessons/generate', [LessonController::class, 'generate']);
 
     Route::post('workspaces/{workspace}/lessons/from-audio', [LessonFromAudioController::class, 'store']);
     Route::post('workspaces/{workspace}/lessons/from-youtube', [LessonFromYoutubeController::class, 'store']);
@@ -62,6 +65,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('lessons/{lesson}/grammar/{grammarPoint}', [LessonGrammarController::class, 'show']);
     Route::post('lessons/{lesson}/grammar/generate', [LessonGrammarController::class, 'generate']);
 
+    Route::post('/speaking/submit', [SpeakingPracticeController::class, 'submit']);
+
+
+    Route::get('/lessons/{lesson}/read-aloud', [LessonReadAloudController::class, 'show']);
+    Route::post('/lessons/{lesson}/read-aloud', [LessonReadAloudController::class, 'generate']);
 });
 
 require __DIR__.'/auth.php';

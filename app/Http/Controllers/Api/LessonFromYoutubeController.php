@@ -42,7 +42,7 @@ class LessonFromYoutubeController extends Controller
             'user_id' => $request->user()?->id,
             'workspace_id' => $workspace->id,
             'title' => $data['title'] ?? 'Lesson from YouTube',
-            'resource_type' => 'video',
+            'resource_type' => \App\Enums\LessonResourceType::Video,
             'source_url' => $data['youtube_url'],
             'original_text' => $text,
             'language' => $workspace->target_language,

@@ -103,9 +103,9 @@ const handleTimeout = () => {
 
 const startPolling = () => {
   if (pollingInterval !== null) return
-  
+
   isGenerationTimedOut.value = false // Reset timeout state
-  
+
   // Set safety timeout (40 seconds)
   if (generationTimeout === null) {
       generationTimeout = window.setTimeout(handleTimeout, 40000)
@@ -246,7 +246,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
              <p class="text-xs opacity-70">This usually takes about 20 seconds.</p>
            </div>
         </div>
-        
+
         <div v-else-if="isGenerationTimedOut" class="w-full" key="timeout">
             <div class="flex flex-col items-center justify-center gap-4 py-8 text-center bg-[var(--app-surface-elevated)]/40 rounded-3xl border border-[var(--app-border)]/50 border-dashed">
                 <div class="h-10 w-10 rounded-full bg-[var(--app-surface-elevated)] flex items-center justify-center text-[var(--app-text-muted)]">

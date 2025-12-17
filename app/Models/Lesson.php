@@ -12,6 +12,7 @@ class Lesson extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'resource_type' => \App\Enums\LessonResourceType::class,
         'tags' => 'array',
         'word_prompt_min_items' => 'integer',
         'word_prompt_max_items' => 'integer',

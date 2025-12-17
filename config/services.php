@@ -75,8 +75,8 @@ return [
         'analysis_chunk_max_chunks' => env('OPENAI_ANALYSIS_CHUNK_MAX_CHUNKS', 6),
         'analysis_time_budget_ms' => env('OPENAI_ANALYSIS_TIME_BUDGET_MS', 65000),
 
-        'exercises_batch_size' => env('OPENAI_EXERCISES_BATCH_SIZE', 6),
-        'exercises_max_completion_tokens' => env('OPENAI_EXERCISES_MAX_COMPLETION_TOKENS', 900),
+        'exercises_batch_size' => env('OPENAI_EXERCISES_BATCH_SIZE', 5),
+        'exercises_max_completion_tokens' => env('OPENAI_EXERCISES_MAX_COMPLETION_TOKENS', 1400),
         'exercises_prompt_text_max_chars' => env('OPENAI_EXERCISES_PROMPT_TEXT_MAX_CHARS', 3200),
 
 

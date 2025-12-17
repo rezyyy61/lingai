@@ -70,11 +70,11 @@ async function handlePlayClick(event: MouseEvent) {
       @click="toggle"
     >
       <!-- Stack effect layers (behind) -->
-      <div 
+      <div
          class="absolute inset-0 bg-[var(--app-surface-elevated)] rounded-[32px] border border-[var(--app-border)] opacity-40 scale-90 translate-y-4 -z-20 transition-transform duration-500"
          :class="isFlipped ? 'rotate-y-180' : ''"
       ></div>
-      <div 
+      <div
          class="absolute inset-0 bg-[var(--app-surface-elevated)] rounded-[32px] border border-[var(--app-border)] opacity-70 scale-95 translate-y-2 -z-10 transition-transform duration-500"
          :class="isFlipped ? 'rotate-y-180' : ''"
       ></div>
@@ -117,7 +117,7 @@ async function handlePlayClick(event: MouseEvent) {
               {{ phonetic }}
             </p>
           </div>
-          
+
           <div v-if="partOfSpeech" class="rounded-full bg-[var(--app-surface)] px-3 py-1 text-xs font-medium text-[var(--app-text-muted)] dark:bg-white/5">
             {{ partOfSpeech }}
           </div>

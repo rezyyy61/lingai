@@ -16,7 +16,7 @@ class GenerateLessonAnalysisJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public Lesson $lesson;
+    public int $lessonId;
 
     public ?string $customPrompt;
 
@@ -24,15 +24,15 @@ class GenerateLessonAnalysisJob implements ShouldQueue
 
     public $backoff = 60;
 
-    public function __construct(Lesson $lesson, ?string $customPrompt = null)
+    public function __construct(Lesson|int $lesson, ?string $customPrompt = null)
     {
-        $this->lesson = $lesson;
+        $this->lessonId = $lesson instanceof Lesson ? (int) $lesson->id : (int) $lesson;
         $this->customPrompt = $customPrompt;
     }
 
     public function handle(LessonAnalysisService $analysisService): void
     {
-        $lesson = $this->lesson->fresh();
+        $lesson = Lesson::query()->find($this->lessonId);
 
         if (! $lesson) {
             return;
@@ -45,16 +45,21 @@ class GenerateLessonAnalysisJob implements ShouldQueue
             return;
         }
 
-        if (empty($analysis)) {
+        if (!is_array($analysis) || empty($analysis)) {
             return;
         }
+
+        $oldMeta = (array) ($lesson->analysis_meta ?? []);
+        $newMeta = (array) ($analysis['meta'] ?? []);
+
+        $mergedMeta = array_merge($oldMeta, $newMeta);
 
         $lesson->update([
             'analysis_overview' => $analysis['overview'] ?? $lesson->analysis_overview,
             'analysis_grammar' => $analysis['grammar_points'] ?? $lesson->analysis_grammar,
             'analysis_vocabulary' => $analysis['vocabulary_focus'] ?? $lesson->analysis_vocabulary,
             'analysis_study_tips' => $analysis['study_tips'] ?? $lesson->analysis_study_tips,
-            'analysis_meta' => $analysis['meta'] ?? $lesson->analysis_meta,
+            'analysis_meta' => $mergedMeta,
         ]);
     }
 

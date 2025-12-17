@@ -1,0 +1,16 @@
+{
+  "record": {
+    "hosts": [
+      "localhost",
+      "127.0.0.1",
+      "192.168.1.193",
+      "172.18.0.1",
+      "172.21.0.1"
+    ],
+    "hash": {
+      "key": "a8729318f882053234cc397616de9b726288ae0bef7093f5bd3e07b29616a3ea",
+      "cert": "422fb37605db5c1c9c25b04894ea6921e621c113b7e52367883d96dea88c2bfc"
+    }
+  },
+  "configFilePath": "/home/rezyyy/PhpstormProjects/zeel/frontend-zeel/certs/config.json"
+}
