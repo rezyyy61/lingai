@@ -72,11 +72,9 @@ async function handlePlayClick(event: MouseEvent) {
       <!-- Stack effect layers (behind) -->
       <div
          class="absolute inset-0 bg-[var(--app-surface-elevated)] rounded-[32px] border border-[var(--app-border)] opacity-40 scale-90 translate-y-4 -z-20 transition-transform duration-500"
-         :class="isFlipped ? 'rotate-y-180' : ''"
       ></div>
       <div
          class="absolute inset-0 bg-[var(--app-surface-elevated)] rounded-[32px] border border-[var(--app-border)] opacity-70 scale-95 translate-y-2 -z-10 transition-transform duration-500"
-         :class="isFlipped ? 'rotate-y-180' : ''"
       ></div>
 
       <!-- FRONT -->

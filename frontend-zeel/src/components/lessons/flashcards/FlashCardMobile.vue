@@ -5,72 +5,6 @@
         class="flex h-full min-h-0 flex-col gap-3 px-4 pt-4"
         :style="{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }"
       >
-        <!-- Header -->
-        <header class="flex items-center justify-between">
-          <div class="min-w-0">
-            <div class="text-xs font-medium tracking-wide text-[color:var(--app-text-muted)]">
-              Flashcards
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <!-- Generate -->
-            <button
-              class="zee-card flex h-11 w-11 items-center justify-center active:scale-[0.99]"
-              type="button"
-              aria-label="Generate"
-              @click="openGenerateModal"
-            >
-              <Icon icon="solar:magic-stick-3-outline" class="h-5 w-5 text-[color:var(--app-text)]" />
-            </button>
-
-            <!-- Reload (manual) when timed out -->
-            <button
-              v-if="isGenerationTimedOut"
-              class="zee-card flex h-11 w-11 items-center justify-center active:scale-[0.99]"
-              type="button"
-              aria-label="Reload"
-              @click="manualReload"
-            >
-              <Icon icon="solar:refresh-outline" class="h-5 w-5 text-[color:var(--app-text)]" />
-            </button>
-
-            <!-- Shuffle (only if we have data) -->
-            <button
-              v-if="isReady && total > 1"
-              class="zee-card flex h-11 w-11 items-center justify-center active:scale-[0.99]"
-              type="button"
-              aria-label="Shuffle"
-              @click="shuffleOrder"
-            >
-              <Icon icon="solar:shuffle-outline" class="h-5 w-5 text-[color:var(--app-text)]" />
-            </button>
-          </div>
-        </header>
-
-        <!-- Progress -->
-        <div>
-          <div class="h-2 w-full overflow-hidden rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel-muted)]">
-            <div
-              class="h-full rounded-full"
-              :style="{
-                width: progressPercent + '%',
-                background: 'linear-gradient(90deg, var(--app-accent), var(--app-accent-strong))',
-              }"
-            />
-          </div>
-
-          <div class="mt-2 flex items-center justify-between text-xs text-[color:var(--app-text-muted)]">
-            <span v-if="isGenerationPending">Generating…</span>
-            <span v-else-if="isGenerationTimedOut">Generation taking longer than expected</span>
-            <span v-else-if="isReady">{{ reviewed }}/{{ total }} reviewed</span>
-            <span v-else>&nbsp;</span>
-
-            <span class="font-semibold" v-if="isReady">{{ reviewed }}/{{ total }}</span>
-            <span class="font-semibold" v-else>0/0</span>
-          </div>
-        </div>
-
         <!-- Card area -->
         <div class="flex-1 min-h-0">
           <!-- Error -->
@@ -98,7 +32,12 @@
             <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
               Generate words for this lesson to start practicing.
             </div>
-            <button class="zee-btn mt-4 w-full py-3" type="button" @click="openGenerateModal">
+            <button
+              class="zee-btn mt-4 w-full py-3"
+              type="button"
+              :disabled="isGenerationPending || isGenerating"
+              @click="handleGenerate"
+            >
               Generate flashcards
             </button>
           </div>
@@ -133,6 +72,10 @@
             @pointermove="onPointerMove"
             @pointerup="onPointerUp"
             @pointercancel="onPointerUp"
+            @touchstart.passive="onTouchStart"
+            @touchmove.passive="onTouchMove"
+            @touchend.passive="onTouchEnd"
+            @touchcancel.passive="onTouchEnd"
             role="button"
             tabindex="0"
             @click="flip"
@@ -243,50 +186,49 @@
           <!-- Fallback -->
           <div v-else class="zee-card h-full overflow-hidden p-5">
             <div class="text-base font-semibold">Nothing to show</div>
-            <button class="zee-btn mt-4 w-full py-3" type="button" @click="openGenerateModal">
+            <button
+              class="zee-btn mt-4 w-full py-3"
+              type="button"
+              :disabled="isGenerationPending || isGenerating"
+              @click="handleGenerate"
+            >
               Generate flashcards
             </button>
           </div>
         </div>
 
         <!-- Actions -->
-        <div class="grid grid-cols-3 gap-3">
+        <div class="mt-2 grid grid-cols-3 gap-3">
           <button
-            class="zee-card flex items-center justify-center gap-2 py-3 active:scale-[0.99] disabled:opacity-50"
+            class="zee-card flex h-9 w-9 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto"
             type="button"
             :disabled="!hasPrev"
             @click="goPrevLocal"
+            aria-label="Previous card"
           >
-            <Icon icon="solar:arrow-left-outline" class="h-5 w-5" />
-            <span class="text-sm font-semibold">Prev</span>
-          </button>
-
-          <button class="zee-btn py-3" type="button" @click="flip" :disabled="!isReady || !card">
-            <div class="flex items-center justify-center gap-2">
-              <Icon icon="solar:refresh-outline" class="h-5 w-5" />
-              <span class="text-sm font-semibold">Flip</span>
-            </div>
+            <Icon icon="solar:arrow-left-outline" class="h-4 w-4" />
           </button>
 
           <button
-            class="zee-card flex items-center justify-center gap-2 py-3 active:scale-[0.99] disabled:opacity-50"
+            class="zee-btn py-2 text-xs font-semibold"
+            type="button"
+            @click="flip"
+            :disabled="!isReady || !card"
+          >
+            Flip
+          </button>
+
+          <button
+            class="zee-card flex h-9 w-9 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto"
             type="button"
             :disabled="!hasNext"
             @click="goNextLocal"
+            aria-label="Next card"
           >
-            <span class="text-sm font-semibold">Next</span>
-            <Icon icon="solar:arrow-right-outline" class="h-5 w-5" />
+            <Icon icon="solar:arrow-right-outline" class="h-4 w-4" />
           </button>
         </div>
       </div>
-
-      <!-- Modal -->
-      <GenerateFlashcardsModal
-        :open="showGenerateModal"
-        :lesson-id="props.lessonId"
-        @close="closeGenerateModal"
-        @queued="handleGenerationQueued"
-      />
 
       <!-- Toast -->
       <transition name="fade">
@@ -305,8 +247,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useLessonFlashcards } from '@/composables/useLessonFlashcards'
-import GenerateFlashcardsModal from '@/components/lessons/GenerateFlashcardsModal.vue'
-import { fetchLessonWordTts } from '@/api/lessonFlashcards'
+import { fetchLessonWordTts, generateLessonFlashcards } from '@/api/lessonFlashcards'
 
 const props = defineProps<{ lessonId: number }>()
 
@@ -334,7 +275,6 @@ const progressPercent = computed(() => (total.value === 0 ? 0 : Math.round((revi
 /**
  * Generate + polling system
  */
-const showGenerateModal = ref(false)
 const isGenerationPending = ref(false)
 const isGenerationTimedOut = ref(false)
 
@@ -412,16 +352,27 @@ const manualReload = () => {
   reload()
 }
 
-const openGenerateModal = () => (showGenerateModal.value = true)
-const closeGenerateModal = () => (showGenerateModal.value = false)
+const isGenerating = ref(false)
 
-const handleGenerationQueued = () => {
-  showGenerateModal.value = false
-  if (isEmpty.value) {
-    isGenerationPending.value = true
-    startPolling()
+const handleGenerate = async () => {
+  if (isGenerating.value) return
+  isGenerationTimedOut.value = false
+  isGenerationPending.value = true
+  isGenerating.value = true
+  persistGenerationState(true)
+  startPolling()
+  try {
+    await generateLessonFlashcards(props.lessonId, { replace_existing: true })
+    pushToast('Vocabulary extraction started')
+  } catch (e) {
+    console.error(e)
+    isGenerationPending.value = false
+    persistGenerationState(false)
+    stopPolling()
+    pushToast('Could not start vocabulary extraction')
+  } finally {
+    isGenerating.value = false
   }
-  pushToast('Vocabulary extraction started')
 }
 
 watch(isReady, (ready) => {
@@ -458,6 +409,7 @@ onBeforeUnmount(() => {
  */
 const card = computed(() => currentCard.value ?? null)
 const isFlipped = ref(false)
+const didSwipe = ref(false)
 watch(() => card.value?.id, () => (isFlipped.value = false))
 
 /**
@@ -476,6 +428,10 @@ const cardStyle = computed(() => {
 
 function flip() {
   if (!isReady.value || !card.value) return
+  if (didSwipe.value) {
+    didSwipe.value = false
+    return
+  }
   isFlipped.value = !isFlipped.value
 }
 
@@ -507,11 +463,37 @@ function onPointerUp() {
 
   const dx = deltaX.value
   const threshold = 70
-  if (dx <= -threshold) goNextLocal()
-  else if (dx >= threshold) goPrevLocal()
+  if (dx <= -threshold) {
+    didSwipe.value = true
+    goNextLocal()
+  } else if (dx >= threshold) {
+    didSwipe.value = true
+    goPrevLocal()
+  }
 
   deltaX.value = 0
   startX.value = null
+}
+
+function onTouchStart(e: TouchEvent) {
+  if (!isReady.value || !card.value) return
+  const t = e.touches[0]
+  if (!t) return
+  startX.value = t.clientX
+  deltaX.value = 0
+  isDragging.value = true
+}
+
+function onTouchMove(e: TouchEvent) {
+  if (!isDragging.value || startX.value === null) return
+  const t = e.touches[0]
+  if (!t) return
+  const dx = t.clientX - startX.value
+  deltaX.value = Math.max(-140, Math.min(140, dx))
+}
+
+function onTouchEnd() {
+  onPointerUp()
 }
 
 /**

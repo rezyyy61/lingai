@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import Flashcard from './flashcards/Flashcard.vue'
-import GenerateFlashcardsModal from './GenerateFlashcardsModal.vue'
 import { useLessonFlashcards } from '@/composables/useLessonFlashcards'
+import { generateLessonFlashcards } from '@/api/lessonFlashcards'
 
 const props = defineProps<{
   lessonId: number
@@ -29,7 +29,6 @@ const progressPercent = computed(() =>
   total.value === 0 ? 0 : Math.round((reviewed.value / total.value) * 100),
 )
 
-const showGenerateModal = ref(false)
 const isGenerationPending = ref(false)
 const isGenerationTimedOut = ref(false)
 const toastMessage = ref('')
@@ -37,6 +36,7 @@ let toastTimeout: number | null = null
 let pollingInterval: number | null = null
 let generationTimeout: number | null = null
 const isFocusMode = ref(false)
+const isGenerating = ref(false)
 
 const generationStorageKey = computed(
   () => `zeel:flashcards-generating:${props.lessonId}`,
@@ -62,14 +62,6 @@ const persistGenerationState = (pending: boolean) => {
   } catch {
     // ignore storage errors
   }
-}
-
-const openGenerateModal = () => {
-  showGenerateModal.value = true
-}
-
-const closeGenerateModal = () => {
-  showGenerateModal.value = false
 }
 
 const pushToast = (message: string) => {
@@ -123,13 +115,25 @@ const manualReload = () => {
     reload()
 }
 
-const handleGenerationQueued = () => {
-  showGenerateModal.value = false
-  if (isEmpty.value) {
-    isGenerationPending.value = true
-    startPolling()
+const handleGenerate = async () => {
+  if (isGenerating.value) return
+  isGenerationTimedOut.value = false
+  isGenerationPending.value = true
+  isGenerating.value = true
+  persistGenerationState(true)
+  startPolling()
+  try {
+    await generateLessonFlashcards(props.lessonId, { replace_existing: true })
+    pushToast('Vocabulary extraction started')
+  } catch (e) {
+    console.error(e)
+    isGenerationPending.value = false
+    persistGenerationState(false)
+    stopPolling()
+    pushToast('Could not start vocabulary extraction')
+  } finally {
+    isGenerating.value = false
   }
-  pushToast('Vocabulary extraction started')
 }
 
 watch(isReady, (ready) => {
@@ -161,14 +165,79 @@ onMounted(() => {
   }
 })
 
+const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.value)
+
+const stageEl = ref<HTMLElement | null>(null)
+const measureEl = ref<HTMLElement | null>(null)
+const cardScale = ref(1)
+
+let roStage: ResizeObserver | null = null
+let roMeasure: ResizeObserver | null = null
+
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
+
+const recomputeScale = () => {
+  const stage = stageEl.value
+  const meas = measureEl.value
+  if (!stage || !meas) return
+
+  const availableW = stage.clientWidth
+  const availableH = stage.clientHeight
+  const neededW = meas.scrollWidth
+  const neededH = meas.scrollHeight
+
+  if (!availableW || !availableH || !neededW || !neededH) {
+    cardScale.value = 1
+    return
+  }
+
+  const sW = availableW / neededW
+  const sH = availableH / neededH
+  const raw = Math.min(sW, sH)
+
+  cardScale.value = clamp(raw, 0.8, 1.12)
+}
+
+const setupObservers = () => {
+  if (typeof ResizeObserver === 'undefined') return
+  roStage = new ResizeObserver(recomputeScale)
+  roMeasure = new ResizeObserver(recomputeScale)
+  if (stageEl.value) roStage.observe(stageEl.value)
+  if (measureEl.value) roMeasure.observe(measureEl.value)
+}
+
+const teardownObservers = () => {
+  roStage?.disconnect()
+  roStage = null
+  roMeasure?.disconnect()
+  roMeasure = null
+}
+
+const scheduleRecompute = async () => {
+  await nextTick()
+  recomputeScale()
+}
+
+watch(() => currentCard.value?.id, scheduleRecompute)
+watch(isFocusMode, scheduleRecompute)
+
+onMounted(() => {
+  const pending = loadGenerationState()
+  if (pending) {
+    isGenerationPending.value = true
+    startPolling()
+  }
+  setupObservers()
+  recomputeScale()
+})
+
 onBeforeUnmount(() => {
   if (toastTimeout) {
     clearTimeout(toastTimeout)
   }
   stopPolling()
+  teardownObservers()
 })
-
-const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.value)
 </script>
 
 <template>
@@ -195,11 +264,11 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
         </span>
         <button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-          :disabled="isGenerationPending"
-          @click="openGenerateModal"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="isGenerationPending || isGenerating"
+          @click="handleGenerate"
         >
-          <span class="text-[10px] font-bold">AI</span>
+          <span class="text-[10px] font-bold">Generate</span>
         </button>
         <button
           type="button"
@@ -223,7 +292,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
       {{ toastMessage }}
     </div>
 
-    <div class="relative flex flex-1 w-full flex-col items-center justify-center gap-3 sm:gap-8 overflow-y-auto pt-2 pb-4 px-1">
+    <div class="relative flex flex-1 w-full flex-col items-center justify-center gap-3 sm:gap-8 overflow-hidden pt-2 pb-4 px-1">
       <Transition name="fade-scale" mode="out-in">
         <div v-if="isError" class="flex flex-col items-center gap-3 text-sm text-red-500" key="error">
           <p>Something went wrong loading flashcards.</p>
@@ -289,7 +358,8 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
           </div>
           <button
             class="rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/30 transition active:scale-95"
-            @click="openGenerateModal"
+            :disabled="isGenerationPending || isGenerating"
+            @click="handleGenerate"
           >
             Generate deck
           </button>
@@ -316,18 +386,30 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
           <div
             class="flex h-full w-full flex-col items-center justify-center gap-6"
           >
-            <div class="flex w-full flex-1 items-center justify-center">
-              <div class="w-full max-w-[320px] sm:max-w-md">
-                <Flashcard
-                  :key="currentCard.id"
-                  :wordId="currentCard.id"
-                  :term="currentCard.term"
-                  :meaning="currentCard.meaning"
-                  :translation="currentCard.translation"
-                  :exampleSentence="currentCard.exampleSentence"
-                  :phonetic="currentCard.phonetic"
-                  :partOfSpeech="currentCard.partOfSpeech"
-                />
+            <div
+              ref="stageEl"
+              class="flex w-full flex-1 items-center justify-center overflow-hidden px-1"
+            >
+              <div
+                :style="{
+                  transform: `scale(${cardScale})`,
+                  transformOrigin: 'center',
+                  willChange: 'transform'
+                }"
+                class="w-full max-w-[320px] sm:max-w-md"
+              >
+                <div ref="measureEl">
+                  <Flashcard
+                    :key="currentCard.id"
+                    :wordId="currentCard.id"
+                    :term="currentCard.term"
+                    :meaning="currentCard.meaning"
+                    :translation="currentCard.translation"
+                    :exampleSentence="currentCard.exampleSentence"
+                    :phonetic="currentCard.phonetic"
+                    :partOfSpeech="currentCard.partOfSpeech"
+                  />
+                </div>
               </div>
             </div>
 
@@ -374,12 +456,6 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
       </Transition>
     </div>
 
-    <GenerateFlashcardsModal
-      :open="showGenerateModal"
-      :lesson-id="props.lessonId"
-      @close="closeGenerateModal"
-      @queued="handleGenerationQueued"
-    />
   </section>
 </template>
 

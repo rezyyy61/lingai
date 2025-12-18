@@ -35,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
         'store',
         'destroy',
     ]);
+    Route::post('lessons/{lesson}/analysis/generate', [LessonController::class, 'generateAnalysis']);
     Route::post('/workspaces/{workspace}/lessons/generate', [LessonController::class, 'generate']);
 
     Route::post('workspaces/{workspace}/lessons/from-audio', [LessonFromAudioController::class, 'store']);

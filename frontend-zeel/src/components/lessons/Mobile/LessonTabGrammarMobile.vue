@@ -1,72 +1,8 @@
 <template>
   <section class="h-full min-h-0">
     <div class="h-full min-h-0 overflow-hidden flex flex-col" style="background: var(--app-bg)">
-      <!-- Top bar (no sticky header here; parent already has tabs) -->
-      <div class="shrink-0 px-4 pt-3">
-        <div class="flex items-center justify-between">
-          <div class="min-w-0">
-            <div class="text-xs font-medium tracking-wide text-[color:var(--app-text-muted)]">
-              Grammar
-            </div>
-            <div class="mt-1 flex items-center gap-2">
-              <div class="truncate text-sm font-semibold text-[color:var(--app-text)]">
-                Notes & examples
-              </div>
-              <span
-                class="shrink-0 rounded-full border border-[color:var(--app-border)]
-                       bg-[color:var(--app-surface-elevated)] px-2 py-0.5
-                       text-xs font-semibold text-[color:var(--app-text-muted)]"
-              >
-                {{ totalLabel }}
-              </span>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button
-              class="zee-card grid h-10 w-10 place-items-center active:scale-[0.99] disabled:opacity-50"
-              type="button"
-              aria-label="Generate grammar"
-              :disabled="isGenerationPending"
-              @click="handleGenerateGrammar"
-            >
-              <Icon icon="solar:magic-stick-3-outline" class="h-5 w-5 text-[color:var(--app-text)]" />
-            </button>
-
-            <button
-              class="zee-card grid h-10 w-10 place-items-center active:scale-[0.99]"
-              type="button"
-              aria-label="Reload"
-              @click="reload"
-            >
-              <Icon icon="solar:refresh-outline" class="h-5 w-5 text-[color:var(--app-text)]" />
-            </button>
-          </div>
-        </div>
-
-        <!-- small progress -->
-        <div class="mt-3">
-          <div class="h-2 w-full overflow-hidden rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel-muted)]">
-            <div
-              class="h-full rounded-full"
-              :style="{
-                width: progressPercent + '%',
-                background: 'linear-gradient(90deg, var(--app-accent), var(--app-accent-strong))',
-              }"
-            />
-          </div>
-
-          <div class="mt-2 flex items-center justify-between text-xs text-[color:var(--app-text-muted)]">
-            <span v-if="isGenerationPending">Generating…</span>
-            <span v-else-if="isReady">Scroll to read</span>
-            <span v-else>&nbsp;</span>
-            <span class="font-semibold">{{ totalLabel }}</span>
-          </div>
-        </div>
-      </div>
-
       <!-- Scrollable content -->
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-6">
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-6">
         <!-- Error -->
         <div v-if="isError" class="zee-card mt-4 p-5">
           <div class="text-base font-semibold">Couldn’t load grammar</div>
@@ -90,7 +26,12 @@
           <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
             Generate grammar points for this lesson.
           </div>
-          <button class="zee-btn mt-4 w-full py-3" type="button" @click="handleGenerateGrammar">
+          <button
+            class="zee-btn mt-4 w-full py-3"
+            type="button"
+            :disabled="isGenerationPending"
+            @click="handleGenerateGrammar"
+          >
             Generate grammar
           </button>
         </div>

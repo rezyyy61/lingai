@@ -5,66 +5,6 @@
         class="flex h-full min-h-0 flex-col gap-3 px-4 pt-4"
         :style="{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }"
       >
-        <!-- Header -->
-        <header class="flex items-center justify-between shrink-0">
-          <div class="min-w-0">
-            <div class="text-xs font-medium tracking-wide text-[color:var(--app-text-muted)]">
-              Shadowing
-            </div>
-            <div class="mt-1 flex items-center gap-2">
-              <span
-                class="shrink-0 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)]
-                       px-2 py-0.5 text-xs font-semibold text-[color:var(--app-text-muted)]"
-              >
-                {{ progressLabel }}
-              </span>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <!-- Generate -->
-            <button
-              class="zee-card flex h-11 w-11 items-center justify-center active:scale-[0.99]"
-              type="button"
-              aria-label="Generate shadowing"
-              @click="openGenerateModal"
-            >
-              <Icon icon="solar:magic-stick-3-outline" class="h-5 w-5 text-[color:var(--app-text)]" />
-            </button>
-
-            <!-- Reload -->
-            <button
-              class="zee-card flex h-11 w-11 items-center justify-center active:scale-[0.99]"
-              type="button"
-              aria-label="Reload"
-              @click="reload"
-            >
-              <Icon icon="solar:refresh-outline" class="h-5 w-5 text-[color:var(--app-text)]" />
-            </button>
-          </div>
-        </header>
-
-        <!-- Progress -->
-        <div class="shrink-0">
-          <div class="h-2 w-full overflow-hidden rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel-muted)]">
-            <div
-              class="h-full rounded-full"
-              :style="{
-                width: progressPercent + '%',
-                background: 'linear-gradient(90deg, var(--app-accent), var(--app-accent-strong))',
-              }"
-            />
-          </div>
-
-          <div class="mt-2 flex items-center justify-between text-xs text-[color:var(--app-text-muted)]">
-            <span v-if="isGenerationPending">Generating…</span>
-            <span v-else-if="isReady">Swipe ↔ to navigate</span>
-            <span v-else>&nbsp;</span>
-
-            <span class="font-semibold">{{ progressLabel }}</span>
-          </div>
-        </div>
-
         <!-- Main card -->
         <div class="flex-1 min-h-0">
           <!-- Error -->
@@ -92,7 +32,12 @@
             <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
               Generate sentences for shadowing practice.
             </div>
-            <button class="zee-btn mt-4 w-full py-3" type="button" @click="openGenerateModal">
+            <button
+              class="zee-btn mt-4 w-full py-3"
+              type="button"
+              :disabled="isGenerationPending || isGenerating"
+              @click="handleGenerate"
+            >
               Generate shadowing
             </button>
           </div>
@@ -188,42 +133,34 @@
               </div>
 
               <!-- Bottom controls -->
-              <div class="mt-4 grid grid-cols-3 gap-3 shrink-0">
+              <div class="mt-3 grid grid-cols-3 gap-3 shrink-0">
                 <button
-                  class="zee-card flex items-center justify-center gap-2 py-3 active:scale-[0.99] disabled:opacity-50"
+                  class="zee-card flex h-9 w-9 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto"
                   type="button"
                   :disabled="!hasPrev"
                   @click="goPrevLocal"
+                  aria-label="Previous sentence"
                 >
-                  <Icon icon="solar:arrow-left-outline" class="h-5 w-5" />
-                  <span class="text-sm font-semibold">Prev</span>
+                  <Icon icon="solar:arrow-left-outline" class="h-4 w-4" />
                 </button>
 
                 <button
-                  class="zee-btn py-3"
+                  class="zee-btn py-2 text-xs font-semibold"
                   type="button"
                   @click="handlePlayClick"
                   :disabled="isAudioLoading"
                 >
-                  <div class="flex items-center justify-center gap-2">
-                    <Icon
-                      :icon="isAudioPlaying ? 'solar:pause-circle-outline' : 'solar:play-circle-outline'"
-                      class="h-6 w-6"
-                    />
-                    <span class="text-sm font-semibold">
-                      {{ isAudioPlaying ? 'Stop' : 'Play' }}
-                    </span>
-                  </div>
+                  {{ isAudioPlaying ? 'Stop' : 'Play' }}
                 </button>
 
                 <button
-                  class="zee-card flex items-center justify-center gap-2 py-3 active:scale-[0.99] disabled:opacity-50"
+                  class="zee-card flex h-9 w-9 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto"
                   type="button"
                   :disabled="!hasNext"
                   @click="goNextLocal"
+                  aria-label="Next sentence"
                 >
-                  <span class="text-sm font-semibold">Next</span>
-                  <Icon icon="solar:arrow-right-outline" class="h-5 w-5" />
+                  <Icon icon="solar:arrow-right-outline" class="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -232,20 +169,17 @@
           <!-- Fallback -->
           <div v-else class="zee-card h-full overflow-hidden p-5">
             <div class="text-base font-semibold">Nothing to show</div>
-            <button class="zee-btn mt-4 w-full py-3" type="button" @click="openGenerateModal">
+            <button
+              class="zee-btn mt-4 w-full py-3"
+              type="button"
+              :disabled="isGenerationPending || isGenerating"
+              @click="handleGenerate"
+            >
               Generate shadowing
             </button>
           </div>
         </div>
       </div>
-
-      <!-- Modal -->
-      <GenerateShadowingModal
-        :open="showGenerateModal"
-        :lesson-id="props.lesson.id"
-        @close="closeGenerateModal"
-        @queued="handleGenerationQueued"
-      />
 
       <!-- Toast -->
       <transition name="fade">
@@ -265,8 +199,7 @@ import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { LessonDetail } from '@/types/lesson'
 import { useLessonShadowing } from '@/composables/useLessonShadowing'
-import { fetchLessonSentenceTts } from '@/api/lessonShadowing'
-import GenerateShadowingModal from "@/components/lessons/GenerateShadowingModal.vue";
+import { fetchLessonSentenceTts, generateLessonShadowingSentences } from '@/api/lessonShadowing'
 
 const props = defineProps<{ lesson: LessonDetail }>()
 
@@ -365,15 +298,11 @@ watch(activeSentence, () => {
 /**
  * Generate / polling
  */
-const showGenerateModal = ref(false)
 const isGenerationPending = ref(false)
 const toastMessage = ref('')
 const pendingBaselineSignature = ref<string | null>(null)
 let toastTimeout: number | null = null
 let pollingInterval: number | null = null
-
-const openGenerateModal = () => (showGenerateModal.value = true)
-const closeGenerateModal = () => (showGenerateModal.value = false)
 
 const pushToast = (message: string) => {
   toastMessage.value = message
@@ -396,12 +325,25 @@ const stopPolling = () => {
   }
 }
 
-const handleGenerationQueued = () => {
-  showGenerateModal.value = false
+const isGenerating = ref(false)
+
+const handleGenerate = async () => {
+  if (isGenerating.value) return
   pendingBaselineSignature.value = sentencesSignature.value
   isGenerationPending.value = true
+  isGenerating.value = true
   startPolling()
-  pushToast('Shadowing sentence generation queued')
+  try {
+    await generateLessonShadowingSentences(props.lesson.id, { replace_existing: true })
+    pushToast('Shadowing sentence generation queued')
+  } catch (e) {
+    console.error(e)
+    isGenerationPending.value = false
+    stopPolling()
+    pushToast('Could not start shadowing generation')
+  } finally {
+    isGenerating.value = false
+  }
 }
 
 watch(isGenerationPending, (pending) => {

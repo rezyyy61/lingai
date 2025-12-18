@@ -3,8 +3,7 @@ import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { LessonDetail } from '@/types/lesson'
 import { useLessonShadowing } from '@/composables/useLessonShadowing'
-import { fetchLessonSentenceTts } from '@/api/lessonShadowing'
-import GenerateShadowingModal from './GenerateShadowingModal.vue'
+import { fetchLessonSentenceTts, generateLessonShadowingSentences } from '@/api/lessonShadowing'
 
 const props = defineProps<{
   lesson: LessonDetail
@@ -43,7 +42,6 @@ const playbackRateOptions = [0.75, 1, 1.25]
 
 let audio: HTMLAudioElement | null = null
 
-const showGenerateModal = ref(false)
 const isGenerationPending = ref(false)
 const toastMessage = ref('')
 const pendingBaselineSignature = ref<string | null>(null)
@@ -120,14 +118,6 @@ watch(activeSentence, () => {
   showTranslation.value = false
 })
 
-const openGenerateModal = () => {
-  showGenerateModal.value = true
-}
-
-const closeGenerateModal = () => {
-  showGenerateModal.value = false
-}
-
 const pushToast = (message: string) => {
   toastMessage.value = message
   if (toastTimeout) {
@@ -153,12 +143,25 @@ const stopPolling = () => {
   }
 }
 
-const handleGenerationQueued = () => {
-  showGenerateModal.value = false
+const isGenerating = ref(false)
+
+const handleGenerate = async () => {
+  if (isGenerating.value) return
   pendingBaselineSignature.value = sentencesSignature.value
   isGenerationPending.value = true
+  isGenerating.value = true
   startPolling()
-  pushToast('Shadowing sentence generation queued')
+  try {
+    await generateLessonShadowingSentences(props.lesson.id, { replace_existing: true })
+    pushToast('Shadowing sentence generation queued')
+  } catch (e) {
+    console.error(e)
+    isGenerationPending.value = false
+    stopPolling()
+    pushToast('Could not start shadowing generation')
+  } finally {
+    isGenerating.value = false
+  }
 }
 
 watch(isGenerationPending, (pending) => {
@@ -223,11 +226,11 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
         </span>
         <button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-          :disabled="isGenerationPending"
-          @click="openGenerateModal"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="isGenerationPending || isGenerating"
+          @click="handleGenerate"
         >
-          <span class="text-[10px] font-bold">AI</span>
+          <span class="text-[10px] font-bold">Generate</span>
         </button>
         <button
           type="button"
@@ -329,7 +332,8 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
           </div>
           <button
             class="rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/30 transition active:scale-95"
-            @click="openGenerateModal"
+            :disabled="isGenerationPending || isGenerating"
+            @click="handleGenerate"
           >
             Generate exercises
           </button>
@@ -476,13 +480,6 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
         </div>
       </Transition>
     </div>
-
-    <GenerateShadowingModal
-      :open="showGenerateModal"
-      :lesson-id="props.lesson.id"
-      @close="closeGenerateModal"
-      @queued="handleGenerationQueued"
-    />
   </section>
 </template>
 

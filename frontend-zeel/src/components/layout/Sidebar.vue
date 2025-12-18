@@ -17,6 +17,8 @@ const emit = defineEmits<{
   'update:q': [value: string]
   'update:level': [value: string]
   'update:resource-type': [value: string]
+  back: []
+  create: []
 }>()
 
 const levels = ['A2', 'B1', 'B2', 'C1']
@@ -33,8 +35,34 @@ const handleSelect = (id: number) => emit('select', id)
 
 <template>
   <aside
-    class="flex h-full flex-col gap-4 rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-4 text-[var(--app-text)] shadow-[var(--app-card-shadow)] transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/70 dark:text-white xl:sticky xl:top-28 xl:max-h-[calc(100vh-9rem)]"
+    class="flex h-[calc(100vh-160px)] flex-col gap-4 rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-4 text-[var(--app-text)] shadow-[var(--app-card-shadow)] transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/70 dark:text-white"
   >
+    <div class="flex items-center justify-between gap-2">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-medium text-[var(--app-text)] transition active:scale-95"
+        @click="emit('back')"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          viewBox="0 0 24 24"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+        </svg>
+        <span>Back</span>
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm shadow-[var(--app-accent)]/35 transition hover:bg-[var(--app-accent-strong)]"
+        @click="emit('create')"
+      >
+        <span class="mr-1 text-sm leading-none">+</span>
+        <span>New</span>
+      </button>
+    </div>
     <div class="space-y-3">
       <p class="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--app-text-muted)] dark:text-white/60">
         Lessons

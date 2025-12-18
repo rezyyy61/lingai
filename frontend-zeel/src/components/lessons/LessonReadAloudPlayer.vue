@@ -37,7 +37,6 @@ const readyMap = ref<Record<Speed, boolean>>({
 const parts = ref<{ index: number; url: string; chars: number }[]>([])
 const currentIndex = ref(0)
 const isPlaying = ref(false)
-
 let audio: HTMLAudioElement | null = null
 
 const isReadySelected = computed(() => readyMap.value[speed.value] === true)
@@ -216,23 +215,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div :class="wrapperClass">
-    <div class="flex items-center justify-between gap-3">
-      <div class="text-sm font-semibold text-[var(--app-text)]">Read Aloud</div>
-
-      <button
-        @click="generateSelected"
-        class="zee-btn px-3 py-2 flex items-center gap-2"
-        :disabled="!canGenerateSelected"
-      >
-        <Icon v-if="isLoading" icon="svg-spinners:90-ring-with-bg" class="h-4 w-4" />
-        <Icon v-else icon="solar:play-circle-bold-duotone" class="h-4 w-4" />
-        <span class="text-sm font-semibold">
-          {{ isReadySelected ? 'Generated' : 'Generate' }}
-        </span>
-      </button>
-    </div>
-
-    <div class="mt-3 grid grid-cols-3 gap-2">
+    <div class="grid grid-cols-3 gap-2">
       <button
         v-for="s in (['slow', 'normal', 'fast'] as const)"
         :key="s"
@@ -274,26 +257,63 @@ onBeforeUnmount(() => {
       {{ error }}
     </div>
 
-    <div v-if="hasParts" class="mt-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-3">
+    <div v-if="hasParts" class="mt-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-3 py-2">
       <div class="flex items-center justify-between gap-3">
-        <div class="text-xs text-[var(--app-text-muted)]">
-          Part {{ currentIndex + 1 }} / {{ parts.length }}
-          <span class="opacity-70">• {{ speedLabel(speed) }} • MP3</span>
+        <div class="flex items-center gap-2">
+          <span
+            class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--app-surface)] text-[var(--app-text-muted)]"
+          >
+            <Icon icon="solar:music-library-bold-duotone" class="h-4 w-4" />
+          </span>
+          <div class="flex flex-col leading-tight">
+            <span class="text-[11px] font-semibold text-[var(--app-text-muted)]">
+              Audio • {{ speedLabel(speed) }}
+            </span>
+            <span class="text-[10px] text-[var(--app-text-muted)]/80">
+              Part {{ currentIndex + 1 }} / {{ parts.length }}
+            </span>
+          </div>
         </div>
 
-        <button class="zee-btn px-3 py-2 flex items-center gap-2" @click="togglePlay" :disabled="isLoading">
+        <button
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--app-accent)] text-white shadow-sm hover:bg-[var(--app-accent-strong)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+          @click="togglePlay"
+          :disabled="isLoading"
+          :title="isPlaying ? 'Pause audio' : 'Play audio'"
+        >
           <Icon v-if="isPlaying" icon="solar:pause-bold" class="h-4 w-4" />
           <Icon v-else icon="solar:play-bold" class="h-4 w-4" />
-          <span class="text-sm font-semibold">{{ isPlaying ? 'Pause' : 'Play' }}</span>
         </button>
       </div>
     </div>
 
     <div
       v-else
-      class="mt-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-3 text-xs text-[var(--app-text-muted)]"
+      class="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-3 text-xs text-[var(--app-text-muted)]"
     >
-      {{ isReadySelected ? 'Saved audio exists but parts are empty.' : 'No saved audio for this speed yet.' }}
+      <span>
+        {{ isReadySelected ? 'Saved audio exists but parts are empty.' : 'No saved audio for this speed yet.' }}
+      </span>
+
+      <button
+        v-if="!isReadySelected"
+        type="button"
+        class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] hover:border-[var(--app-accent)] hover:bg-[var(--app-surface-elevated)] transition disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="!canGenerateSelected"
+        @click="generateSelected"
+        title="Generate audio"
+      >
+        <Icon
+          v-if="isLoading"
+          icon="svg-spinners:90-ring-with-bg"
+          class="h-4 w-4"
+        />
+        <Icon
+          v-else
+          icon="solar:add-circle-bold-duotone"
+          class="h-4 w-4"
+        />
+      </button>
     </div>
   </div>
 </template>

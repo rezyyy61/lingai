@@ -32,16 +32,16 @@ class LessonReadAloudService
 
         $ext = $format === 'wav' ? 'wav' : 'mp3';
 
-        $storyText = trim((string) ($lesson->original_text ?? ''));
+        $text = trim((string) ($lesson->original_text ?? ''));
         $locale = $this->toAzureLocale((string) ($lesson->target_language ?? 'en'));
 
         $meta = (array) ($lesson->analysis_meta ?? []);
-        $dialogueRows = data_get($meta, 'lesson_pack.dialogue', []);
-        if (!is_array($dialogueRows)) $dialogueRows = [];
+        $pack = data_get($meta, 'lesson_pack');
+        $packDialogueSegments = $this->segmentsFromLessonPackDialogue(is_array($pack) ? $pack : null);
 
-        $segments = $this->buildStoryThenDialogueSegments($storyText, $dialogueRows);
+        $hasAnyInput = ($text !== '') || (count($packDialogueSegments) > 0);
 
-        if (count($segments) === 0) {
+        if (!$hasAnyInput) {
             return [
                 'exists' => false,
                 'parts' => [],
@@ -63,14 +63,18 @@ class LessonReadAloudService
             throw new \RuntimeException('No Azure voice found for locale: ' . $locale);
         }
 
-        $hasDialogue = $this->looksLikeDialogue($segments);
+        $speakerSegments = count($packDialogueSegments) > 0
+            ? $packDialogueSegments
+            : $this->ssml->extractSpeakerSegments($text);
+
+        $hasDialogue = $this->looksLikeDialogue($speakerSegments);
 
         $effectiveMode = $mode === 'auto'
-            ? ($hasDialogue ? 'mixed' : 'narration')
+            ? ($hasDialogue ? 'quote' : 'narration')
             : $mode;
 
         $voiceRunsPack = $this->buildVoiceRuns(
-            speakerSegments: $segments,
+            speakerSegments: $speakerSegments,
             voices: $voices,
             mode: $effectiveMode,
             maxCharsPerRun: 2200
@@ -103,13 +107,13 @@ class LessonReadAloudService
         $parts = [];
         foreach ($voiceRuns as $i => $run) {
             $voiceName = (string) ($run['voice'] ?? '');
-            $segmentsText = (array) ($run['segments'] ?? []);
-            if ($voiceName === '' || empty($segmentsText)) {
+            $segments = (array) ($run['segments'] ?? []);
+            if ($voiceName === '' || empty($segments)) {
                 continue;
             }
 
             $ssml = $this->buildSingleVoiceSsml(
-                segments: $segmentsText,
+                segments: $segments,
                 locale: $locale,
                 voiceName: $voiceName,
                 speed: $speed
@@ -124,14 +128,13 @@ class LessonReadAloudService
                 'index' => $i + 1,
                 'path' => $path,
                 'url' => '/storage/' . ltrim($path, '/'),
-                'chars' => $this->charsCount($segmentsText),
+                'chars' => $this->charsCount($segments),
                 'voice' => $voiceName,
             ];
         }
 
         $baseUrl = '/storage/' . ltrim($basePath, '/');
 
-        $meta = (array) ($lesson->analysis_meta ?? []);
         $meta['read_aloud'] = is_array($meta['read_aloud'] ?? null) ? $meta['read_aloud'] : [];
         $meta['read_aloud'][$speed] = is_array($meta['read_aloud'][$speed] ?? null) ? $meta['read_aloud'][$speed] : [];
 
@@ -187,48 +190,37 @@ class LessonReadAloudService
         ];
     }
 
-    protected function buildStoryThenDialogueSegments(string $storyText, array $dialogueRows): array
+    protected function segmentsFromLessonPackDialogue(?array $pack): array
     {
-        $segments = [];
+        if (!$pack) return [];
+        $dlg = $pack['dialogue'] ?? null;
+        if (!is_array($dlg) || count($dlg) === 0) return [];
 
-        $storyText = trim($storyText);
-        if ($storyText !== '') {
-            $paras = preg_split("/\n{2,}/u", $storyText) ?: [];
-            $paras = array_values(array_filter(array_map(fn ($p) => trim((string) $p), $paras)));
-
-            foreach ($paras as $p) {
-                if ($p === '') continue;
-                $segments[] = ['speaker' => null, 'text' => $p];
-            }
-        }
-
-        $dlg = [];
-        foreach ($dialogueRows as $row) {
+        $out = [];
+        foreach ($dlg as $row) {
             if (!is_array($row)) continue;
-            $sp = trim((string) ($row['speaker'] ?? ''));
-            $tx = trim((string) ($row['text'] ?? ''));
-            if ($tx === '') continue;
-            $dlg[] = [
-                'speaker' => $sp !== '' ? $sp : null,
+            $sp = is_string($row['speaker'] ?? null) ? trim((string) $row['speaker']) : '';
+            $tx = is_string($row['text'] ?? null) ? trim((string) $row['text']) : '';
+            if ($sp === '' || $tx === '') continue;
+
+            $out[] = [
+                'speaker' => $sp,
                 'text' => $tx,
             ];
         }
 
-        if (count($dlg)) {
-            $segments[] = ['speaker' => null, 'text' => ''];
-            foreach ($dlg as $d) $segments[] = $d;
-        }
-
-        return $segments;
+        return $out;
     }
 
     protected function buildVoiceRuns(array $speakerSegments, array $voices, string $mode, int $maxCharsPerRun = 2200): array
     {
         $mode = $this->normalizeMode($mode);
+        $hasDialogue = $this->looksLikeDialogue($speakerSegments);
+        $effectiveMode = $mode === 'auto'
+            ? ($hasDialogue ? 'quote' : 'narration')
+            : $mode;
 
-        $speakerMap = in_array($mode, ['quote', 'mixed'], true)
-            ? $this->speakerVoiceMap($speakerSegments, $voices)
-            : [];
+        $speakerMap = $effectiveMode === 'quote' ? $this->speakerVoiceMap($speakerSegments, $voices) : [];
 
         $items = [];
         $alt = 0;
@@ -243,9 +235,8 @@ class LessonReadAloudService
             $text = $this->stripPossibleSpeakerPrefix($text);
 
             $voice = (string) ($voices['narrator'] ?? '');
-            if ($voice === '') continue;
 
-            if ($mode === 'quote') {
+            if ($effectiveMode === 'quote' && $hasDialogue) {
                 if ($speaker !== '' && isset($speakerMap[$speaker])) {
                     $voice = (string) $speakerMap[$speaker];
                 } else {
@@ -256,18 +247,7 @@ class LessonReadAloudService
                 }
             }
 
-            if ($mode === 'mixed') {
-                if ($speaker !== '') {
-                    if (isset($speakerMap[$speaker])) {
-                        $voice = (string) $speakerMap[$speaker];
-                    } else {
-                        $voice = ($alt % 2 === 0)
-                            ? (string) ($voices['voice_a'] ?? $voice)
-                            : (string) ($voices['voice_b'] ?? $voice);
-                        $alt++;
-                    }
-                }
-            }
+            if ($voice === '') continue;
 
             $items[] = [
                 'voice' => $voice,
@@ -316,7 +296,7 @@ class LessonReadAloudService
         }
 
         return [
-            'mode' => $mode,
+            'mode' => $effectiveMode,
             'speaker_map' => $speakerMap,
             'runs' => $runs,
         ];
@@ -464,11 +444,10 @@ class LessonReadAloudService
     protected function normalizeMode(string $mode): string
     {
         $m = strtolower(trim($mode));
-        if (!in_array($m, ['auto', 'narration', 'quote', 'dialogue', 'mixed'], true)) {
+        if (!in_array($m, ['auto', 'narration', 'quote', 'dialogue'], true)) {
             return 'auto';
         }
-        if ($m === 'dialogue') return 'quote';
-        return $m;
+        return $m === 'dialogue' ? 'quote' : $m;
     }
 
     protected function e(string $text): string

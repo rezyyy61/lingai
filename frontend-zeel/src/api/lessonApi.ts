@@ -19,6 +19,10 @@ export const fetchLesson = async (id: number) => {
   return data
 }
 
+export const generateLessonAnalysis = async (lessonId: number) => {
+  await http.post(`/lessons/${lessonId}/analysis/generate`)
+}
+
 export const createLesson = async (
   workspaceId: number,
   payload: {

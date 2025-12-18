@@ -22,9 +22,6 @@ const form = reactive({
   length: 'medium' as 'short' | 'medium' | 'long',
   keywords: '',
   title_hint: '',
-  include_dialogue: true,
-  include_key_phrases: true,
-  include_quick_questions: true,
 })
 
 const isBusy = ref(false)
@@ -36,9 +33,6 @@ const reset = () => {
   form.length = 'medium'
   form.keywords = ''
   form.title_hint = ''
-  form.include_dialogue = true
-  form.include_key_phrases = true
-  form.include_quick_questions = true
   emit('error', '')
 }
 
@@ -60,10 +54,6 @@ const canSubmit = computed(() => {
   return form.topic.trim().length >= 3
 })
 
-const toggle = (key: 'include_dialogue' | 'include_key_phrases' | 'include_quick_questions') => {
-  form[key] = !form[key]
-}
-
 const submit = async () => {
   if (!canSubmit.value) return
   if (!props.workspaceId) {
@@ -83,9 +73,9 @@ const submit = async () => {
       length: form.length,
       keywords: parseCommaList(form.keywords, 12),
       title_hint: form.title_hint.trim() || undefined,
-      include_dialogue: form.include_dialogue,
-      include_key_phrases: form.include_key_phrases,
-      include_quick_questions: form.include_quick_questions,
+      include_dialogue: true,
+      include_key_phrases: false,
+      include_quick_questions: false,
     })
 
     emit('created', lesson.id)
@@ -125,42 +115,9 @@ const submit = async () => {
     <input v-model="form.keywords" type="text" placeholder="Keywords (comma)" class="zee-input" />
     <input v-model="form.goal" type="text" placeholder="Goal (optional)" class="zee-input" />
 
-    <div class="flex flex-wrap gap-2 pt-1">
-      <button
-        type="button"
-        class="rounded-2xl border border-[var(--app-border)] px-3 py-2 text-xs font-semibold transition"
-        :class="form.include_dialogue
-          ? 'bg-[var(--app-surface-elevated)] text-[var(--app-text)] ring-1 ring-black/5 dark:ring-white/5'
-          : 'bg-[var(--app-panel-muted)] text-[var(--app-text-muted)] hover:text-[var(--app-text)]'"
-        @click="toggle('include_dialogue')"
-        :disabled="isBusy"
-      >
-        Dialogue
-      </button>
-
-      <button
-        type="button"
-        class="rounded-2xl border border-[var(--app-border)] px-3 py-2 text-xs font-semibold transition"
-        :class="form.include_key_phrases
-          ? 'bg-[var(--app-surface-elevated)] text-[var(--app-text)] ring-1 ring-black/5 dark:ring-white/5'
-          : 'bg-[var(--app-panel-muted)] text-[var(--app-text-muted)] hover:text-[var(--app-text)]'"
-        @click="toggle('include_key_phrases')"
-        :disabled="isBusy"
-      >
-        Key phrases
-      </button>
-
-      <button
-        type="button"
-        class="rounded-2xl border border-[var(--app-border)] px-3 py-2 text-xs font-semibold transition"
-        :class="form.include_quick_questions
-          ? 'bg-[var(--app-surface-elevated)] text-[var(--app-text)] ring-1 ring-black/5 dark:ring-white/5'
-          : 'bg-[var(--app-panel-muted)] text-[var(--app-text-muted)] hover:text-[var(--app-text)]'"
-        @click="toggle('include_quick_questions')"
-        :disabled="isBusy"
-      >
-        Questions
-      </button>
+    <div class="flex items-center gap-2 pt-1 text-xs font-semibold text-[var(--app-text-muted)]">
+      <Icon icon="solar:chat-round-dots-bold-duotone" class="h-4 w-4 text-[var(--app-accent)]" />
+      <span>Dialogue only</span>
     </div>
 
     <button type="submit" class="zee-btn w-full py-3.5 flex items-center justify-center gap-2" :disabled="!canSubmit">

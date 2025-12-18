@@ -99,6 +99,20 @@ class LessonController extends Controller
         return response()->json([], 204);
     }
 
+    public function generateAnalysis(Request $request, Lesson $lesson)
+    {
+        $user = $request->user();
+        if ($lesson->user_id !== $user->id) {
+            abort(403);
+        }
+
+        GenerateLessonAnalysisJob::dispatch($lesson);
+
+        return response()->json([
+            'status' => 'queued',
+        ], 202);
+    }
+
     public function generate(Request $request, Workspace $workspace)
     {
         $user = $request->user();
@@ -117,14 +131,7 @@ class LessonController extends Controller
             'keywords' => ['nullable', 'array', 'max:12'],
             'keywords.*' => ['string', 'max:40'],
             'title_hint' => ['nullable', 'string', 'max:120'],
-            'include_dialogue' => ['nullable'],
-            'include_key_phrases' => ['nullable'],
-            'include_quick_questions' => ['nullable'],
         ]);
-
-        $includeDialogue = $request->boolean('include_dialogue', true);
-        $includeKeyPhrases = $request->boolean('include_key_phrases', true);
-        $includeQuickQuestions = $request->boolean('include_quick_questions', true);
 
         $level = $data['level'] ?? ($workspace->target_level ?? config('learning_languages.default_level', 'A2'));
         if (!in_array($level, $supportedLevels, true)) {
@@ -136,7 +143,7 @@ class LessonController extends Controller
         $goal = trim((string) ($data['goal'] ?? ''));
 
         $tags = array_values(array_unique(array_filter(array_merge(
-            ['ai'],
+            ['ai', 'dialogue'],
             $data['keywords'] ?? []
         ))));
 
@@ -147,16 +154,14 @@ class LessonController extends Controller
                 'length' => $length,
                 'keywords' => $data['keywords'] ?? [],
                 'title_hint' => $data['title_hint'] ?? null,
-                'include_dialogue' => $includeDialogue,
-                'include_key_phrases' => $includeKeyPhrases,
-                'include_quick_questions' => $includeQuickQuestions,
+                'dialogue_only' => true,
             ],
         ];
 
         $lesson = Lesson::create([
             'user_id' => $user->id,
             'workspace_id' => $workspace->id,
-            'title' => $titleHint !== '' ? $titleHint : 'Generating lesson…',
+            'title' => $titleHint !== '' ? $titleHint : 'Generating dialogue…',
             'resource_type' => \App\Enums\LessonResourceType::TextAi,
             'source_url' => null,
             'original_text' => '',

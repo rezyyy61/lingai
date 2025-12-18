@@ -5,6 +5,9 @@ import { Icon } from '@iconify/vue'
 import LessonReadAloudPlayer from '@/components/lessons/LessonReadAloudPlayer.vue'
 
 const props = defineProps<{ lesson: LessonDetail }>()
+const emit = defineEmits<{
+  (e: 'desktop-read-change', value: boolean): void
+}>()
 
 const isSerif = ref(false)
 const fontSize = ref<'normal' | 'large'>('normal')
@@ -18,19 +21,23 @@ let mq: MediaQueryList | null = null
 let onMqChange: ((e: MediaQueryListEvent) => void) | null = null
 
 const lessonPack = computed(() => (props.lesson as any)?.lesson_pack ?? null)
-
-const storyText = computed(() => {
-  const t = lessonPack.value?.lesson_text
-  const fallback = (props.lesson as any)?.original_text
-  return String(t ?? fallback ?? '')
-})
+const isTextAi = computed(() => (props.lesson as any)?.resource_type === 'text_ai')
 
 const dialogueRows = computed(() => {
   const d = lessonPack.value?.dialogue
   return Array.isArray(d) ? d : []
 })
 
+const hasDialogue = computed(() => dialogueRows.value.length > 0)
 const leftSpeaker = computed(() => dialogueRows.value?.[0]?.speaker ?? '')
+
+
+const storyText = computed(() => {
+  if (hasDialogue.value) return ''
+  const t = lessonPack.value?.lesson_text
+  const fallback = (props.lesson as any)?.original_text
+  return String(t ?? fallback ?? '')
+})
 
 const toggleFont = () => {
   isSerif.value = !isSerif.value
@@ -41,9 +48,20 @@ const toggleSize = () => {
 }
 
 const toggleRead = () => {
+  if (!isTextAi.value) return
+
   const next = !showReadAloud.value
   showReadAloud.value = next
-  isReadExpanded.value = next ? true : false
+
+  if (isMobile.value) {
+    isReadExpanded.value = next
+    if (!next) {
+      isAudioPlaying.value = false
+    }
+  } else {
+    isReadExpanded.value = true
+    emit('desktop-read-change', next)
+  }
 }
 
 const toggleReadExpand = () => {
@@ -52,9 +70,14 @@ const toggleReadExpand = () => {
 }
 
 const closeReadAloud = () => {
+  if (!showReadAloud.value) return
   showReadAloud.value = false
   isReadExpanded.value = false
   isAudioPlaying.value = false
+
+  if (!isMobile.value) {
+    emit('desktop-read-change', false)
+  }
 }
 
 const readBottomInset = computed(() => {
@@ -110,9 +133,9 @@ const formatText = (text: string) => {
   return safe
 }
 
-const hasText = computed(() => {
-  const t = storyText.value
-  return t.trim().length > 0
+const hasContent = computed(() => {
+  if (hasDialogue.value) return true
+  return storyText.value.trim().length > 0
 })
 
 const typedKey = computed(() => {
@@ -162,7 +185,12 @@ const resetTypingState = () => {
 
 const runTypewriterOnce = async () => {
   resetTypingState()
-  if (!hasText.value) return
+
+  if (!isTextAi.value) {
+    return
+  }
+
+  if (!storyText.value.trim()) return
 
   wasTypedOnce.value = loadTypedOnceFlag()
   if (wasTypedOnce.value) return
@@ -204,9 +232,9 @@ const runTypewriterOnce = async () => {
 }
 
 watch(
-  () => storyText.value,
+  () => [storyText.value, hasDialogue.value],
   async () => {
-    if (!hasText.value) {
+    if (hasDialogue.value) {
       resetTypingState()
       return
     }
@@ -215,19 +243,38 @@ watch(
   { immediate: true },
 )
 
+const copySourceText = computed(() => {
+  if (hasDialogue.value) {
+    return dialogueRows.value.map((r) => `${r.speaker}: ${r.text}`).join('\n')
+  }
+  return storyText.value
+})
+
 const copyText = async () => {
   try {
-    await navigator.clipboard.writeText(storyText.value || '')
+    await navigator.clipboard.writeText(copySourceText.value || '')
   } catch (e) {
     console.error(e)
   }
 }
 
 const onKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && showReadAloud.value && isMobile.value) {
+  if (e.key === 'Escape' && showReadAloud.value) {
     closeReadAloud()
   }
 }
+
+watch(
+  () => (props.lesson as any)?.resource_type,
+  (type) => {
+    if (type !== 'text_ai') {
+      showReadAloud.value = false
+      isReadExpanded.value = false
+      isAudioPlaying.value = false
+      emit('desktop-read-change', false)
+    }
+  },
+)
 
 onMounted(() => {
   mq = window.matchMedia('(max-width: 767px)')
@@ -259,22 +306,25 @@ onBeforeUnmount(() => {
     >
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[var(--app-text-muted)]">
-          <Icon icon="solar:document-text-bold-duotone" class="h-4 w-4" />
-          <span>Lesson Text</span>
+          <Icon :icon="hasDialogue ? 'solar:chat-round-dots-bold-duotone' : 'solar:document-text-bold-duotone'" class="h-4 w-4" />
+          <span>{{ hasDialogue ? 'Dialogue' : 'Lesson Text' }}</span>
         </div>
 
         <div class="flex items-center gap-1">
           <button
+            v-if="isTextAi"
             @click="toggleRead"
             class="h-8 px-3 flex items-center gap-2 rounded-lg hover:bg-[var(--app-border)] transition text-[var(--app-text-muted)] hover:text-[var(--app-text)]"
-            :title="showReadAloud ? 'Hide Read Aloud' : 'Show Read Aloud'"
+            :title="isMobile ? (showReadAloud ? 'Hide Read Aloud' : 'Show Read Aloud') : 'Open Read Aloud'"
           >
             <Icon
               :icon="isAudioPlaying ? 'svg-spinners:bars-scale' : 'solar:soundwave-bold-duotone'"
               class="h-4 w-4"
               :class="isAudioPlaying ? 'text-[var(--app-accent)]' : ''"
             />
-            <span class="text-xs font-bold">{{ showReadAloud ? 'Close' : 'Read' }}</span>
+            <span class="text-xs font-bold">
+              {{ isMobile ? (showReadAloud ? 'Close' : 'Read') : 'Read' }}
+            </span>
           </button>
 
           <button
@@ -298,7 +348,7 @@ onBeforeUnmount(() => {
           <button
             @click="copyText"
             class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-[var(--app-border)] transition text-[var(--app-text-muted)] hover:text-[var(--app-accent)]"
-            title="Copy Text"
+            title="Copy"
           >
             <Icon icon="solar:copy-bold-duotone" class="h-4 w-4" />
           </button>
@@ -306,10 +356,9 @@ onBeforeUnmount(() => {
       </div>
 
       <transition name="slide-fade">
-        <div v-if="showReadAloud && !isMobile" class="mt-3">
-          <LessonReadAloudPlayer :lesson-id="lesson.id" variant="inline" @playing-change="isAudioPlaying = $event" />
-        </div>
+        <div v-if="showReadAloud && !isMobile" class="mt-3"></div>
       </transition>
+
     </header>
 
     <div
@@ -323,11 +372,16 @@ onBeforeUnmount(() => {
           fontSize === 'large' ? 'text-lg md:text-xl' : 'text-base md:text-lg',
         ]"
       >
-        <div v-if="!hasText" class="rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-5">
+        <div
+          v-if="!hasContent && isTextAi"
+          class="rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-5"
+        >
           <div class="flex items-center gap-3">
             <Icon icon="svg-spinners:270-ring-with-bg" class="h-5 w-5 text-[var(--app-accent)]" />
             <div class="min-w-0">
-              <div class="text-sm font-semibold text-[var(--app-text)]">Generating lesson text…</div>
+              <div class="text-sm font-semibold text-[var(--app-text)]">
+                {{ hasDialogue ? 'Generating dialogue…' : 'Generating lesson text…' }}
+              </div>
               <div class="text-xs text-[var(--app-text-muted)] mt-1">Please wait a moment.</div>
             </div>
           </div>
@@ -340,41 +394,36 @@ onBeforeUnmount(() => {
         </div>
 
         <template v-else>
-          <div
-            v-for="(block, index) in formattedBlocks"
-            :key="index"
-            class="leading-relaxed text-[var(--app-text)] dark:text-slate-100"
-          >
-            <template v-if="isTyping && !typedDone[index]">
-              <span class="whitespace-pre-wrap">{{ typedBlocks[index] }}</span>
-              <span class="inline-block w-[0.6ch] animate-pulse text-[var(--app-accent)]">▍</span>
-            </template>
+          <template v-if="!hasDialogue">
+            <div
+              v-for="(block, index) in formattedBlocks"
+              :key="index"
+              class="leading-relaxed text-[var(--app-text)] dark:text-slate-100"
+            >
+              <template v-if="isTyping && !typedDone[index]">
+                <span class="whitespace-pre-wrap">{{ typedBlocks[index] }}</span>
+                <span class="inline-block w-[0.6ch] animate-pulse text-[var(--app-accent)]">▍</span>
+              </template>
 
-            <template v-else>
-              <span v-html="block.html"></span>
-            </template>
-          </div>
-
-          <div v-if="dialogueRows.length" class="pt-6 mt-8 border-t border-[var(--app-border)]">
-            <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[var(--app-text-muted)] mb-4">
-              <Icon icon="solar:chat-round-dots-bold-duotone" class="h-4 w-4" />
-              <span>Dialogue</span>
+              <template v-else>
+                <span v-html="block.html"></span>
+              </template>
             </div>
+          </template>
 
-            <div class="space-y-2">
+          <div v-if="hasDialogue" class="space-y-2">
+            <div
+              v-for="(row, i) in dialogueRows"
+              :key="i"
+              class="flex"
+              :class="row.speaker === leftSpeaker ? 'justify-start' : 'justify-end'"
+            >
               <div
-                v-for="(row, i) in dialogueRows"
-                :key="i"
-                class="flex"
-                :class="row.speaker === leftSpeaker ? 'justify-start' : 'justify-end'"
+                class="max-w-[82%] rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2 text-sm shadow-sm"
+                :class="row.speaker === leftSpeaker ? '' : 'bg-[var(--app-surface-elevated)]'"
               >
-                <div
-                  class="max-w-[82%] rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2 text-sm shadow-sm"
-                  :class="row.speaker === leftSpeaker ? '' : 'bg-[var(--app-surface-elevated)]'"
-                >
-                  <div class="text-[10px] font-bold opacity-70">{{ row.speaker }}</div>
-                  <div class="mt-1 leading-relaxed whitespace-pre-wrap">{{ row.text }}</div>
-                </div>
+                <div class="text-[10px] font-bold opacity-70">{{ row.speaker }}</div>
+                <div class="mt-1 leading-relaxed whitespace-pre-wrap">{{ row.text }}</div>
               </div>
             </div>
           </div>
@@ -384,14 +433,17 @@ onBeforeUnmount(() => {
 
     <transition name="bottom-player">
       <div
-        v-if="showReadAloud && isMobile"
+        v-if="showReadAloud && isMobile && isTextAi"
         class="fixed inset-x-0 z-[200] px-3 pb-3 pointer-events-none"
         :style="{ bottom: 'var(--read-bottom-inset)' }"
       >
         <div
           class="mx-auto w-full max-w-xl pointer-events-auto rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] shadow-xl overflow-hidden"
         >
-          <div class="flex items-center justify-between px-4 py-3" :class="isReadExpanded ? 'border-b border-[var(--app-border)]' : ''">
+          <div
+            class="flex items-center justify-between px-4 py-3"
+            :class="isReadExpanded ? 'border-b border-[var(--app-border)]' : ''"
+          >
             <button
               @click="toggleReadExpand"
               class="flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition"
@@ -423,12 +475,17 @@ onBeforeUnmount(() => {
             :class="isReadExpanded ? 'max-h-[45vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'"
           >
             <div class="p-3">
-              <LessonReadAloudPlayer :lesson-id="lesson.id" variant="sheet" @playing-change="isAudioPlaying = $event" />
+              <LessonReadAloudPlayer
+                :lesson-id="lesson.id"
+                variant="sheet"
+                @playing-change="isAudioPlaying = $event"
+              />
             </div>
           </div>
         </div>
       </div>
     </transition>
+
   </div>
 </template>
 
@@ -456,4 +513,5 @@ article {
   transform: translateY(12px);
   opacity: 0;
 }
+
 </style>

@@ -24,18 +24,9 @@ const metaLabel = (lesson: LessonDetail) =>
         {{ lesson.title }}
       </h2>
       <p class="text-sm text-[var(--app-text-muted)] dark:text-white/60">
-        {{ new Date(lesson.created_at).toLocaleDateString() }} • {{ metaLabel(lesson) }}
+        {{ metaLabel(lesson) }}
         <template v-if="lesson.level"> • Level {{ lesson.level }}</template>
       </p>
-    </div>
-    <div v-if="lesson.tags?.length" class="flex flex-wrap gap-2">
-      <span
-        v-for="tag in lesson.tags"
-        :key="tag"
-        class="rounded-full border border-[var(--app-border)] px-3 py-1 text-[11px] uppercase tracking-wide text-[var(--app-text-muted)] dark:border-white/15 dark:text-white/70"
-      >
-        {{ tag }}
-      </span>
     </div>
   </header>
 </template>

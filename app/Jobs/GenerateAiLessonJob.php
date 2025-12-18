@@ -31,19 +31,7 @@ class GenerateAiLessonJob implements ShouldQueue
         $meta = (array) ($lesson->analysis_meta ?? []);
         $g = (array) ($meta['ai_generation'] ?? []);
 
-        $includeDialogue = filter_var(data_get($g, 'include_dialogue', true), FILTER_VALIDATE_BOOLEAN);
-        $includeKeyPhrases = filter_var(data_get($g, 'include_key_phrases', true), FILTER_VALIDATE_BOOLEAN);
-        $includeQuickQuestions = filter_var(data_get($g, 'include_quick_questions', true), FILTER_VALIDATE_BOOLEAN);
-
-        Log::info('GenerateAiLessonJob flags', [
-            'lesson_id' => $lesson->id,
-            'include_dialogue' => $includeDialogue,
-            'include_key_phrases' => $includeKeyPhrases,
-            'include_quick_questions' => $includeQuickQuestions,
-            'ai_generation_raw' => $g,
-        ]);
-
-        $pack = $gen->generate(
+        $pack = $gen->generateDialogueOnly(
             topic: (string) data_get($g, 'topic', ''),
             goal: (string) data_get($g, 'goal', ''),
             level: (string) ($lesson->level ?? 'A2'),
@@ -52,25 +40,23 @@ class GenerateAiLessonJob implements ShouldQueue
             supportLang: (string) $lesson->support_language,
             keywords: (array) data_get($g, 'keywords', []),
             titleHint: (string) data_get($g, 'title_hint', ''),
-            includeDialogue: $includeDialogue,
-            includeKeyPhrases: $includeKeyPhrases,
-            includeQuickQuestions: $includeQuickQuestions,
         );
 
-        Log::info('GenerateAiLessonJob pack sizes', [
+        $dialogueText = $this->renderDialogueToOriginalText((array) ($pack['dialogue'] ?? []));
+
+        Log::info('GenerateAiLessonJob dialogue-only pack', [
             'lesson_id' => $lesson->id,
             'dlg_count' => is_array($pack['dialogue'] ?? null) ? count($pack['dialogue']) : null,
-            'kp_count' => is_array($pack['key_phrases'] ?? null) ? count($pack['key_phrases']) : null,
-            'qq_count' => is_array($pack['quick_questions'] ?? null) ? count($pack['quick_questions']) : null,
+            'title_len' => mb_strlen((string) ($pack['title'] ?? '')),
+            'original_text_len' => mb_strlen($dialogueText),
         ]);
 
-        $lessonText = trim((string) ($pack['lesson_text'] ?? ''));
         $title = trim((string) ($pack['title'] ?? ''));
 
         $lesson->update([
             'title' => $title !== '' ? $title : $lesson->title,
-            'original_text' => $lessonText,
-            'short_description' => $lessonText !== '' ? mb_substr($lessonText, 0, 180) : null,
+            'original_text' => $dialogueText,
+            'short_description' => $dialogueText !== '' ? mb_substr($dialogueText, 0, 180) : null,
             'tags' => array_values(array_unique(array_merge($lesson->tags ?? [], $pack['tags'] ?? []))),
             'status' => 'draft',
             'analysis_meta' => array_merge($meta, [
@@ -78,7 +64,23 @@ class GenerateAiLessonJob implements ShouldQueue
             ]),
         ]);
 
-        GenerateLessonAnalysisJob::dispatch($lesson->id);
+        GenerateLessonAnalysisJob::dispatch($lesson);
+    }
+
+    protected function renderDialogueToOriginalText(array $dialogue): string
+    {
+        $lines = [];
+
+        foreach ($dialogue as $row) {
+            if (!is_array($row)) continue;
+            $sp = trim((string) ($row['speaker'] ?? ''));
+            $tx = trim((string) ($row['text'] ?? ''));
+            if ($sp === '' || $tx === '') continue;
+
+            $lines[] = $sp . ': ' . $tx;
+        }
+
+        return trim(implode("\n>>\n", $lines));
     }
 
     public function failed(Throwable $e): void

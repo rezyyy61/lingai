@@ -253,39 +253,65 @@ class FastLessonWordsService
             : "Chunk: full text";
 
         return <<<TXT
-You are building vocabulary for a language-learning app.
+You are an expert language teacher and curriculum designer building a vocabulary pack for a language-learning app.
 
-Return ONLY valid JSON. No markdown. No extra keys. No extra text.
+Return ONLY a valid JSON object. No markdown. No extra keys. No extra text.
 
 Schema (exact):
 {"words":[{"term":"","meaning":"","example_sentence":"","translation":""}]}
 
 Goal:
-Pick the most useful, high-impact vocabulary to understand THIS text.
+Pick the most useful, high-impact vocabulary needed to understand THIS text. Prefer common, reusable expressions learners actually use.
 
 Count:
 - Return EXACTLY {$count} items.
 - If truly impossible, return as many as possible but at least {$minCount}.
 
-Term rules (STRICT):
-- "term" must be copied EXACTLY from the text (same casing/spaces/punctuation) and MUST appear in the text.
-- Prefer meaningful phrases (2–5 words) that learners actually use, when they appear in the text.
-- Avoid filler/basic words, platform boilerplate, URLs, hashtags, timestamps, raw numbers, proper names.
+Hard constraints (MUST follow):
+- Output MUST be valid JSON and MUST match the schema exactly.
+- Every "term" MUST appear in the provided text EXACTLY as written (same casing, spaces, punctuation).
+- "term" MUST be a vocabulary item (word or short phrase), NOT a full sentence or clause.
 
-Quality rules (STRICT):
-- "meaning": short learner-friendly definition written ONLY in {$targetMeta['label']} ({$targetMeta['native']}). Not a word-for-word translation.
-- "example_sentence": NEW natural sentence written ONLY in {$targetMeta['label']} ({$targetMeta['native']}). Short, clear, realistic.
-- "translation": natural fluent translation written ONLY in {$supportMeta['label']} ({$supportMeta['native']}).
-  Do NOT output any other language (even one word). If unsure, set translation to "".
-- translation MUST match the meaning used in the example_sentence.
+Term constraints (VERY STRICT):
+- "term" word count: 1 to 5 words ONLY.
+- "term" length: max 42 characters.
+- "term" MUST NOT contain newline characters.
+- "term" MUST NOT contain sentence punctuation: . ! ? ; :
+- "term" MUST NOT contain more than 1 comma.
+- "term" MUST NOT contain URLs, emails, hashtags, @handles, timestamps, raw numbers, or boilerplate UI/app text.
+- Avoid proper names (people/brands/places) unless they are essential learning items.
+- Prefer phrases (2–5 words) over single words when they carry meaning and appear in the text.
 
-Important (spelling / teaching):
+Meaning (STRICT):
+- "meaning" must be a short learner-friendly explanation written ONLY in {$targetMeta['label']} ({$targetMeta['native']}).
+- Do NOT translate word-by-word; explain the sense used in THIS text.
+- Keep it concise (one short sentence or a phrase). No lists.
+
+Example sentence (STRICT):
+- "example_sentence" must be a NEW natural sentence written ONLY in {$targetMeta['label']} ({$targetMeta['native']}).
+- It MUST clearly demonstrate the same meaning as "meaning".
+- Keep it short, clear, realistic, and learner-friendly.
+- Do NOT copy a full sentence from the text. You may reuse the term, but the sentence must be newly written.
+
+Translation (VERY STRICT):
+- "translation" must be ONLY in {$supportMeta['label']} ({$supportMeta['native']}), even inside parentheses.
+- "translation" MUST translate the ENTIRE example_sentence naturally (human translation). Do NOT translate word-by-word.
+- If the term is idiomatic, translate the idiomatic meaning (not the literal words).
+- "translation" MUST match the exact sense used in example_sentence.
+- REQUIRED FORMAT (exact structure):
+  "{translated example_sentence} ({translated meaning of term})"
+  The part in parentheses MUST be a short natural translation of the term itself (same sense as meaning/example).
+- If you are not confident the translation is correct and natural (either sentence or term), set "translation" to "".
+
+Quality filters:
+- Avoid near-duplicates (same term with minor punctuation/plural changes).
+- Avoid overly generic words (e.g., "good", "very", "thing") unless they are key in context.
+- Prefer terms that are useful beyond this single text.
+
+Spelling / teaching constraints:
 - If the text explicitly teaches a correct spelling (e.g., it spells a word like "A I S L E"),
   output ONLY the correct spelling form.
-- Do NOT include the common mistake form if the correct form also appears in the text
-  (example: include "aisle" not "isle" if both appear).
-
-No duplicates / near-duplicates.
+- Do NOT include the common mistake form if the correct form also appears in the text.
 
 {$chunkLine}
 

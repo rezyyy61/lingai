@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import type { Lesson } from '@/mock/lessonData'
+import { computed, ref } from 'vue'
+import type { Lesson } from '@/types/lesson'
 
 const props = defineProps<{
   lessons: Lesson[]
@@ -17,7 +17,8 @@ const filteredLessons = computed(() => {
   return props.lessons.filter((lesson) => lesson.title.toLowerCase().includes(query))
 })
 
-const resourceLabel = (lesson: Lesson) => (lesson.resourceType === 'video' ? 'Video resource' : 'Text resource')
+const resourceLabel = (lesson: Lesson) =>
+  lesson.resource_type === 'video' ? 'Video resource' : 'Text resource'
 
 const handleSelect = (lessonId: number) => {
   emit('select', lessonId)
@@ -50,9 +51,11 @@ const handleSelect = (lessonId: number) => {
       >
         <p class="text-sm font-semibold">{{ lesson.title }}</p>
         <p class="mt-1 text-xs text-[var(--app-border-dark)] dark:text-[var(--app-border)]">
-          {{ lesson.createdAt }} • {{ resourceLabel(lesson) }}<span v-if="lesson.level"> • Level {{ lesson.level }}</span>
+          {{ lesson.created_at }} • {{ resourceLabel(lesson) }}<span v-if="lesson.level"> • Level {{ lesson.level }}</span>
         </p>
-        <p class="mt-2 text-sm text-[var(--app-border-dark)] line-clamp-2 dark:text-[var(--app-border)]">{{ lesson.shortDescription }}</p>
+        <p class="mt-2 text-sm text-[var(--app-border-dark)] line-clamp-2 dark:text-[var(--app-border)]">
+          {{ lesson.short_description }}
+        </p>
         <div v-if="lesson.tags?.length" class="mt-3 flex flex-wrap gap-2 text-xs">
           <span
             v-for="tag in lesson.tags"

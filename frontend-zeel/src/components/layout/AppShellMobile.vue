@@ -352,16 +352,6 @@ onBeforeUnmount(() => {
                 <LessonResourceText :lesson="selectedLesson" class="h-auto" />
               </div>
             </div>
-
-            <!-- Analysis compact bottom (optional scroll) -->
-            <div class="shrink-0 mt-3 max-h-48 overflow-y-auto rounded-2xl border border-[var(--app-border)] bg-[color:var(--app-surface)] p-2">
-              <LessonAnalysisPanel
-                :lesson="selectedLesson!"
-                @updated="handleLessonUpdated"
-                @toast="handleAnalysisToast"
-                class="!rounded-xl !p-3 !shadow-none !border-0"
-              />
-            </div>
           </template>
 
           <div v-else class="flex flex-1 flex-col items-center justify-center text-center">

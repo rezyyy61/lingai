@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useLessonExercises } from '@/composables/useLessonExercises'
 import { Icon } from '@iconify/vue'
 import type { LessonExerciseOption } from '@/types/lesson'
-import GenerateExercisesModal from './GenerateExercisesModal.vue'
+import { generateLessonExercises } from '@/api/lessonExercises'
 
 const props = defineProps<{
   lessonId: number
@@ -13,7 +13,6 @@ const skillFilter = ref('')
 const typeFilter = ref('')
 const selectedOptionId = ref<number | null>(null)
 
-const showGenerateModal = ref(false)
 const isGenerationPending = ref(false)
 const toastMessage = ref('')
 const pendingBaselineSignature = ref<string | null>(null)
@@ -105,14 +104,6 @@ watch(activeAttempt, (attempt) => {
   }
 })
 
-const openGenerateModal = () => {
-  showGenerateModal.value = true
-}
-
-const closeGenerateModal = () => {
-  showGenerateModal.value = false
-}
-
 const pushToast = (message: string) => {
   toastMessage.value = message
   if (toastTimeout) {
@@ -138,12 +129,25 @@ const stopPolling = () => {
   }
 }
 
-const handleGenerationQueued = () => {
-  showGenerateModal.value = false
+const isGenerating = ref(false)
+
+const handleGenerate = async () => {
+  if (isGenerating.value) return
   pendingBaselineSignature.value = exercisesSignature.value
   isGenerationPending.value = true
+  isGenerating.value = true
   startPolling()
-  pushToast('Exercise generation queued')
+  try {
+    await generateLessonExercises(props.lessonId, { replace_existing: true })
+    pushToast('Exercise generation queued')
+  } catch (e) {
+    console.error(e)
+    isGenerationPending.value = false
+    stopPolling()
+    pushToast('Could not start exercise generation')
+  } finally {
+    isGenerating.value = false
+  }
 }
 
 watch(isGenerationPending, (pending) => {
@@ -233,11 +237,11 @@ const optionClasses = (option: LessonExerciseOption) => {
         </span>
         <button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-          :disabled="isGenerationPending"
-          @click="openGenerateModal"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="isGenerationPending || isGenerating"
+          @click="handleGenerate"
         >
-          <span class="text-[10px] font-bold">AI</span>
+          <span class="text-[10px] font-bold">Generate</span>
         </button>
       </div>
     </div>
@@ -340,7 +344,8 @@ const optionClasses = (option: LessonExerciseOption) => {
           </p>
           <button
             class="mt-6 w-full rounded-xl bg-[var(--app-accent)] px-6 py-3 text-sm font-bold text-white shadow-md shadow-[var(--app-accent)]/20 active:scale-95 transition-transform"
-            @click="openGenerateModal"
+            :disabled="isGenerationPending || isGenerating"
+            @click="handleGenerate"
           >
             Generate exercises
           </button>
@@ -473,13 +478,6 @@ const optionClasses = (option: LessonExerciseOption) => {
         </div>
       </Transition>
     </div>
-
-    <GenerateExercisesModal
-      :open="showGenerateModal"
-      :lesson-id="props.lessonId"
-      @close="closeGenerateModal"
-      @queued="handleGenerationQueued"
-    />
   </section>
 </template>
 

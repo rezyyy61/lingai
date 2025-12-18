@@ -5,6 +5,7 @@ import { fetchLesson } from '@/api/lessonApi'
 
 const props = defineProps<{
   lesson: LessonDetail
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -267,15 +268,26 @@ onBeforeUnmount(() => {
 
 <template>
   <section
-    class="w-full rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-6 text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] transition dark:border-white/10 dark:bg-[var(--app-surface-dark)]/90 dark:text-white dark:shadow-[0_25px_80px_rgba(0,0,0,0.5)]"
+    class="w-full text-[var(--app-text)] transition dark:text-white"
+    :class="props.compact
+      ? 'rounded-none border-0 bg-transparent p-0 shadow-none'
+      : 'rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-6 shadow-[var(--app-card-shadow-strong)] dark:border-white/10 dark:bg-[var(--app-surface-dark)]/90 dark:shadow-[0_25px_80px_rgba(0,0,0,0.5)]'
+    "
   >
     <div class="flex items-start justify-between">
       <div>
-        <p class="text-xs uppercase tracking-[0.3em] text-[var(--app-text-muted)] dark:text-white/60">Teacher’s summary</p>
-        <h3 class="mt-2 text-2xl font-semibold">Lesson analysis</h3>
+        <p class="text-[11px] uppercase tracking-[0.3em] text-[var(--app-text-muted)] dark:text-white/60">
+          {{ props.compact ? 'Summary' : 'Teacher’s summary' }}
+        </p>
+        <h3
+          v-if="!props.compact"
+          class="mt-2 text-2xl font-semibold"
+        >
+          Lesson analysis
+        </h3>
       </div>
       <button
-        v-if="hasAnalysis && isTyping"
+        v-if="!props.compact && hasAnalysis && isTyping"
         class="text-xs uppercase tracking-[0.25em] text-[var(--app-accent)] hover:text-[var(--app-accent-strong)]"
         @click="revealAll"
       >
@@ -313,8 +325,13 @@ onBeforeUnmount(() => {
       >
         <template v-for="section in sections" :key="section.label">
           <div v-if="section.value" class="space-y-2">
-            <p class="text-sm uppercase tracking-[0.3em] text-[var(--app-text-muted)] dark:text-white/60">{{ section.label }}</p>
-            <p class="text-lg leading-relaxed text-[var(--app-text)] dark:text-white/90">
+            <p class="text-[11px] uppercase tracking-[0.25em] text-[var(--app-text-muted)] dark:text-white/60">
+              {{ section.label }}
+            </p>
+            <p
+              class="leading-relaxed text-[var(--app-text)] dark:text-white/90"
+              :class="props.compact ? 'text-sm' : 'text-base'"
+            >
               {{ visibleText[section.label] ?? section.value }}
               <span
                 v-if="isTyping && visibleText[section.label] !== section.value"
