@@ -36,7 +36,7 @@
 
           <!-- Icon Tabs -->
           <div class="relative mt-3 px-4 pb-4">
-            <div class="grid grid-cols-5 gap-2">
+            <div class="grid grid-cols-4 gap-2">
               <button
                 v-for="t in tabs"
                 :key="t.key"
@@ -83,7 +83,7 @@
               :icon="tabs.find(t => t.key === activeTab)?.icon || 'solar:card-outline'"
               class="h-4 w-4"
             />
-            <span>{{ tabs.find(t => t.key === activeTab)?.label || 'Summary' }}</span>
+            <span>{{ tabs.find(t => t.key === activeTab)?.label || 'Flashcards' }}</span>
           </div>
         </div>
 
@@ -92,14 +92,8 @@
 
       <!-- Content -->
       <div class="flex-1 min-h-0 overflow-hidden">
-        <LessonTabSummary
-          v-if="activeTab === 'summary'"
-          class="h-full min-h-0"
-          :lesson="lessonFull"
-        />
-
         <FlashCardMobile
-          v-else-if="activeTab === 'flashcards'"
+          v-if="activeTab === 'flashcards'"
           class="h-full min-h-0"
           :lesson-id="lessonId"
           :initial-words="initialWords"
@@ -125,10 +119,13 @@
           :lesson-id="lessonId"
         />
 
-        <LessonTabSummary
+        <FlashCardMobile
           v-else
           class="h-full min-h-0"
-          :lesson="lessonFull"
+          :lesson-id="lessonId"
+          :initial-words="initialWords"
+          :title="contentTitle"
+          @generate="$emit('generate')"
         />
       </div>
 
@@ -146,9 +143,8 @@ import FlashCardMobile from '@/components/lessons/flashcards/FlashCardMobile.vue
 import LessonTabShadowingMobile from '@/components/lessons/Mobile/LessonTabShadowingMobile.vue'
 import LessonTabGrammarMobile from '@/components/lessons/Mobile/LessonTabGrammarMobile.vue'
 import LessonTabExercisesMobile from '@/components/lessons/Mobile/LessonTabExercisesMobile.vue'
-import LessonTabSummary from '@/components/lessons/LessonTabSummary.vue'
 
-type TabKey = 'summary' | 'flashcards' | 'shadowing' | 'grammar' | 'exercises'
+type TabKey = 'flashcards' | 'shadowing' | 'grammar' | 'exercises'
 
 const props = defineProps<{
   lesson: LessonDetail
@@ -163,14 +159,13 @@ defineEmits<{
 }>()
 
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
-  { key: 'summary', label: 'Summary', icon: 'solar:document-text-outline' },
   { key: 'flashcards', label: 'Flashcards', icon: 'solar:card-outline' },
   { key: 'shadowing', label: 'Shadowing', icon: 'solar:microphone-3-outline' },
   { key: 'grammar', label: 'Grammar', icon: 'solar:book-2-outline' },
   { key: 'exercises', label: 'Exercises', icon: 'solar:checklist-minimalistic-outline' },
 ]
 
-const activeTab = ref<TabKey>(props.defaultTab ?? 'summary')
+const activeTab = ref<TabKey>(props.defaultTab ?? 'flashcards')
 const isDetail = ref(false)
 
 const lessonId = computed(() => Number(props.lesson?.id || 0))
@@ -189,7 +184,7 @@ function selectTab(key: TabKey) {
 }
 
 function exitDetail() {
-  activeTab.value = 'summary'
+  activeTab.value = 'flashcards'
   isDetail.value = false
 }
 

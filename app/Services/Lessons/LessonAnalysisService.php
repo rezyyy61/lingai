@@ -5,7 +5,6 @@ namespace App\Services\Lessons;
 use App\Models\Lesson;
 use App\Services\Ai\LlmClient;
 use App\Services\Ai\Pipelines\ChunkedPromptRunner;
-use App\Services\Text\ChunkPlan;
 use App\Services\Text\ChunkPolicy;
 use App\Services\Text\TextChunker;
 use Illuminate\Support\Facades\Log;

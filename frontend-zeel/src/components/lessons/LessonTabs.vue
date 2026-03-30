@@ -7,23 +7,14 @@ import LessonTabShadowing from './LessonTabShadowing.vue'
 import LessonGrammarTab from './LessonGrammarTab.vue'
 import LessonTabExercises from './LessonTabExercises.vue'
 import LessonTabNotes from './LessonTabNotes.vue'
-import LessonTabSummary from './LessonTabSummary.vue'
 
 const props = defineProps<{ lesson: LessonDetail }>()
 
-const activeTab = ref<'flashcards' | 'shadowing' | 'grammar' | 'exercises' | 'summary' | 'notes'>('summary')
+const activeTab = ref<'flashcards' | 'shadowing' | 'grammar' | 'exercises' | 'notes'>('flashcards')
 const isDetail = ref(false)
 
 // Tools for the "Studio" section
 const tools = [
-  {
-    id: 'summary',
-    label: 'Summary',
-    icon: 'solar:document-text-bold-duotone',
-    color: 'text-amber-300',
-    bg: 'bg-amber-300/10',
-    border: 'border-amber-300/20'
-  },
   {
     id: 'flashcards',
     label: 'Flashcards',
@@ -65,7 +56,7 @@ const setActiveTab = (id: typeof activeTab.value) => {
 }
 
 const exitDetail = () => {
-  activeTab.value = 'summary'
+  activeTab.value = 'flashcards'
   isDetail.value = false
 }
 </script>
@@ -176,7 +167,6 @@ const exitDetail = () => {
                   activeTab === 'shadowing' ? LessonTabShadowing :
                   activeTab === 'grammar' ? LessonGrammarTab :
                   activeTab === 'exercises' ? LessonTabExercises :
-                  activeTab === 'summary' ? LessonTabSummary :
                   LessonTabNotes
                "
                :lesson-id="lesson.id"

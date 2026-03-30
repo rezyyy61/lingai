@@ -37,11 +37,13 @@ class LessonSentenceService
             return [];
         }
 
+        $wordCount = $this->wordCount($text);
         $minItems = (int) config('services.openai.shadowing_min_items', 12);
         $maxItems = (int) config('services.openai.shadowing_max_items', 20);
 
-        // Decide desired count by text size but clamp to min/max
-        $desired = $this->suggestSentenceCount($text, $minItems, $maxItems);
+        // For short lessons, ask for fewer sentences and accept smaller packs.
+        $desired = $this->suggestSentenceCount($text, $maxItems);
+        $requiredItems = $this->minimumAcceptedSentenceCount($desired, $minItems, $wordCount);
 
         // Shrink before chunking (keeps head+tail)
         $maxChars = (int) config('services.openai.shadowing_max_chars', 7000);
@@ -65,10 +67,11 @@ class LessonSentenceService
             'desired' => $desired,
             'min_items' => $minItems,
             'max_items' => $maxItems,
+            'required_items' => $requiredItems,
             'chunks' => count($plan->chunks),
             'per_chunk_target' => $perChunkTarget,
             'per_chunk_min' => $perChunkMin,
-            'total_words' => $plan->totalWords ?? null,
+            'total_words' => $wordCount,
             'total_chars' => $plan->totalChars ?? null,
             'target_words' => $plan->targetWords ?? null,
             'overlap_words' => $plan->overlapWords ?? null,
@@ -141,7 +144,7 @@ class LessonSentenceService
         }
 
         // Fallback: run once on full text if still too few
-        if (count($merged) < min($minItems, $desired)) {
+        if (count($merged) < $requiredItems) {
             $fallbackPlan = new ChunkPlan(
                 [$shrunk],
                 0,
@@ -165,7 +168,7 @@ class LessonSentenceService
                                 target: $targetLanguage,
                                 support: $supportLanguage,
                                 count: $desired,
-                                minCount: min($minItems, $desired),
+                                minCount: $requiredItems,
                                 chunkIndex: 0,
                                 chunksTotal: 0,
                             ),
@@ -194,10 +197,10 @@ class LessonSentenceService
             );
         }
 
-        if (count($merged) < min($minItems, $desired)) {
+        if (count($merged) < $requiredItems) {
             Log::warning('LessonSentenceService: insufficient sentences', $logContext + [
                     'items' => count($merged),
-                    'need_at_least' => min($minItems, $desired),
+                    'need_at_least' => $requiredItems,
                 ]);
             return [];
         }
@@ -501,17 +504,34 @@ TXT;
     // Helpers
     // ---------------------------
 
-    protected function suggestSentenceCount(string $text, int $min, int $max): int
+    protected function suggestSentenceCount(string $text, int $max): int
     {
         $n = $this->wordCount($text);
 
-        $desired = 16;
-        if ($n <= 250) $desired = 12;
+        $desired = 18;
+
+        if ($n <= 70) $desired = 4;
+        elseif ($n <= 100) $desired = 6;
+        elseif ($n <= 130) $desired = 8;
+        elseif ($n <= 190) $desired = 10;
+        elseif ($n <= 260) $desired = 12;
         elseif ($n <= 500) $desired = 14;
         elseif ($n <= 900) $desired = 16;
-        else $desired = 18;
 
-        return max($min, min($max, $desired));
+        return max(3, min($max, $desired));
+    }
+
+    protected function minimumAcceptedSentenceCount(int $desired, int $configuredMin, int $wordCount): int
+    {
+        if ($wordCount <= 190) {
+            return 1;
+        }
+
+        if ($desired < $configuredMin) {
+            return max(3, $desired);
+        }
+
+        return min($configuredMin, $desired);
     }
 
     protected function planPerChunkCount(int $chunks, int $desiredTotal): int

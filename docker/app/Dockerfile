@@ -19,8 +19,10 @@ RUN pecl install redis && docker-php-ext-enable redis
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 
+RUN git config --global --add safe.directory /var/www/html
+
 COPY composer.json composer.lock* ./
-RUN composer install --no-scripts --no-autoloader || true
+RUN composer install --no-dev --prefer-dist --no-interaction --no-scripts --no-autoloader
 COPY . .
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
