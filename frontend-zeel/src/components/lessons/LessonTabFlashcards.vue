@@ -1,33 +1,32 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
-import Flashcard from './flashcards/Flashcard.vue'
+import type { LessonDetail } from '@/types/lesson'
+import FlashcardEditModal from './flashcards/FlashcardEditModal.vue'
+import FlashcardJsonImportModal from './flashcards/FlashcardJsonImportModal.vue'
+import FlashcardReviewCard from './flashcards/FlashcardReviewCard.vue'
+import { useFlashcardReview } from '@/composables/useFlashcardReview'
 import { useLessonFlashcards } from '@/composables/useLessonFlashcards'
-import { generateLessonFlashcards } from '@/api/lessonFlashcards'
+import { deleteLessonWord, generateLessonFlashcards } from '@/api/lessonFlashcards'
 
 const props = defineProps<{
   lessonId: number
+  lesson?: LessonDetail
 }>()
 
 const {
   currentCard,
   total,
-  reviewed,
-  remaining,
   isLoading,
   isError,
   isEmpty,
   isReady,
-  hasPrev,
-  hasNext,
-  goNext,
-  goPrev,
   reload,
 } = useLessonFlashcards(props.lessonId)
 
-const progressPercent = computed(() =>
-  total.value === 0 ? 0 : Math.round((reviewed.value / total.value) * 100),
-)
+const review = useFlashcardReview(props.lessonId)
+const reviewCard = computed(() => review.currentCard.value)
+const activeCard = computed(() => review.currentCard.value ?? currentCard.value)
 
 const isGenerationPending = ref(false)
 const isGenerationTimedOut = ref(false)
@@ -37,6 +36,9 @@ let pollingInterval: number | null = null
 let generationTimeout: number | null = null
 const isFocusMode = ref(false)
 const isGenerating = ref(false)
+const isImportModalOpen = ref(false)
+const isEditModalOpen = ref(false)
+const isDeleting = ref(false)
 
 const generationStorageKey = computed(
   () => `zeel:flashcards-generating:${props.lessonId}`,
@@ -115,6 +117,10 @@ const manualReload = () => {
     reload()
 }
 
+const handleReloadClick = () => {
+  reload()
+}
+
 const handleGenerate = async () => {
   if (isGenerating.value) return
   isGenerationTimedOut.value = false
@@ -136,10 +142,61 @@ const handleGenerate = async () => {
   }
 }
 
+const handleResetReview = async () => {
+  await review.reset()
+  if (!review.currentCard.value) {
+    pushToast('No flashcards are available to review')
+  }
+}
+
+const handleReviewSubmit = async (result: 'know' | 'dont_know') => {
+  if (!reviewCard.value) {
+    return
+  }
+
+  await review.submit(result)
+
+  if (review.isComplete.value) {
+    pushToast('Review session complete')
+  }
+}
+
+const handleImported = async (count: number) => {
+  await reload()
+  await review.start()
+  pushToast(`${count} flashcard${count > 1 ? 's' : ''} imported`)
+}
+
+const handleEdited = async () => {
+  await reload(activeCard.value?.id ?? null)
+  await review.start()
+  pushToast('Flashcard updated')
+}
+
+const handleDelete = async () => {
+  if (!activeCard.value || isDeleting.value) return
+  const confirmed = window.confirm(`Delete "${activeCard.value.term}"?`)
+  if (!confirmed) return
+
+  isDeleting.value = true
+  try {
+    await deleteLessonWord(props.lessonId, activeCard.value.id)
+    await reload()
+    await review.start()
+    pushToast('Flashcard deleted')
+  } catch (error) {
+    console.error(error)
+    pushToast('Could not delete flashcard')
+  } finally {
+    isDeleting.value = false
+  }
+}
+
 watch(isReady, (ready) => {
   if (ready) {
     if (isGenerationPending.value) {
       pushToast('Vocabulary is ready')
+      review.start()
     }
     isGenerationPending.value = false
     isGenerationTimedOut.value = false
@@ -218,8 +275,9 @@ const scheduleRecompute = async () => {
   recomputeScale()
 }
 
-watch(() => currentCard.value?.id, scheduleRecompute)
+watch(() => reviewCard.value?.id, scheduleRecompute)
 watch(isFocusMode, scheduleRecompute)
+watch(() => review.isAnswerVisible.value, scheduleRecompute)
 
 onMounted(() => {
   const pending = loadGenerationState()
@@ -229,6 +287,7 @@ onMounted(() => {
   }
   setupObservers()
   recomputeScale()
+  review.start()
 })
 
 onBeforeUnmount(() => {
@@ -252,16 +311,32 @@ onBeforeUnmount(() => {
           Flashcards
         </p>
         <p class="text-[11px] text-[var(--app-text-muted)] hidden sm:block">
-          Key vocabulary from this lesson
+          Review flashcards from this lesson
         </p>
       </div>
-      <div class="flex items-center gap-2 text-[11px] text-[var(--app-text-muted)]">
+      <div class="flex flex-wrap items-center justify-end gap-2 text-[11px] text-[var(--app-text-muted)]">
         <span
-          v-if="total"
           class="rounded-full bg-[var(--app-surface-elevated)] border border-[var(--app-border)] px-2.5 py-1 font-medium"
         >
-          {{ reviewed }} / {{ total }}
+          {{ review.dueCount }} due
         </span>
+        <span
+          class="rounded-full bg-[var(--app-surface-elevated)] border border-[var(--app-border)] px-2.5 py-1 font-medium"
+        >
+          {{ review.successCount }} good
+        </span>
+        <span
+          class="rounded-full bg-[var(--app-surface-elevated)] border border-[var(--app-border)] px-2.5 py-1 font-medium"
+        >
+          {{ review.failureCount }} bad
+        </span>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95"
+          @click="handleResetReview"
+        >
+          <span class="text-[10px] font-bold">Restart all</span>
+        </button>
         <button
           type="button"
           class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
@@ -269,6 +344,29 @@ onBeforeUnmount(() => {
           @click="handleGenerate"
         >
           <span class="text-[10px] font-bold">Generate</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95"
+          @click="isImportModalOpen = true"
+        >
+          <span class="text-[10px] font-bold">Import JSON</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="!activeCard"
+          @click="isEditModalOpen = true"
+        >
+          <span class="text-[10px] font-bold">Edit</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="!activeCard || isDeleting"
+          @click="handleDelete"
+        >
+          <span class="text-[10px] font-bold">{{ isDeleting ? 'Deleting…' : 'Delete' }}</span>
         </button>
         <button
           type="button"
@@ -298,7 +396,7 @@ onBeforeUnmount(() => {
           <p>Something went wrong loading flashcards.</p>
           <button
             class="rounded-full border border-current px-5 py-2 text-xs font-semibold"
-            @click="reload"
+            @click="handleReloadClick"
           >
             Try again
           </button>
@@ -356,17 +454,25 @@ onBeforeUnmount(() => {
               Generate a fresh set of vocabulary cards for this lesson.
             </p>
           </div>
+          <div class="flex flex-wrap items-center justify-center gap-3">
           <button
             class="rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/30 transition active:scale-95"
             :disabled="isGenerationPending || isGenerating"
-            @click="handleGenerate"
-          >
-            Generate deck
-          </button>
+              @click="handleGenerate"
+            >
+              Generate deck
+            </button>
+            <button
+              class="rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-2.5 text-sm font-semibold text-[var(--app-text)] transition active:scale-95"
+              @click="isImportModalOpen = true"
+            >
+              Import JSON
+            </button>
+          </div>
         </div>
 
         <div
-          v-else-if="isReady && currentCard"
+          v-else-if="reviewCard"
           class="relative flex w-full flex-1 flex-col items-center justify-center min-h-0"
           key="active"
         >
@@ -399,15 +505,15 @@ onBeforeUnmount(() => {
                 class="w-full max-w-[320px] sm:max-w-md"
               >
                 <div ref="measureEl">
-                  <Flashcard
-                    :key="currentCard.id"
-                    :wordId="currentCard.id"
-                    :term="currentCard.term"
-                    :meaning="currentCard.meaning"
-                    :translation="currentCard.translation"
-                    :exampleSentence="currentCard.exampleSentence"
-                    :phonetic="currentCard.phonetic"
-                    :partOfSpeech="currentCard.partOfSpeech"
+                  <FlashcardReviewCard
+                    :key="reviewCard.id"
+                    :word-id="reviewCard.id"
+                    :term="reviewCard.term"
+                    :meaning="reviewCard.meaning"
+                    :translation="reviewCard.translation"
+                    :example-sentence="reviewCard.exampleSentence"
+                    :phonetic="reviewCard.phonetic"
+                    :revealed="review.isAnswerVisible.value"
                   />
                 </div>
               </div>
@@ -420,43 +526,110 @@ onBeforeUnmount(() => {
             >
               <button
                 type="button"
-                class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
-                :disabled="!hasPrev"
-                @click="goPrev"
+                class="flex h-12 w-12 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 text-red-300 shadow-sm transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+                :disabled="!reviewCard || review.isSubmitting.value"
+                @click="handleReviewSubmit('dont_know')"
               >
-                <Icon icon="solar:arrow-left-linear" class="h-6 w-6" />
+                <Icon icon="solar:close-circle-bold-duotone" class="h-6 w-6" />
               </button>
-
-              <div class="flex flex-col items-center">
-                <span class="text-xs font-semibold text-[var(--app-text)]">
-                  {{ reviewed }} / {{ total }}
-                </span>
-                <span class="text-[10px] text-[var(--app-text-muted)]">Cards</span>
-              </div>
 
               <button
                 type="button"
-                class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] shadow-sm transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
-                :disabled="!hasNext"
-                @click="goNext"
+                class="rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-3 text-xs font-semibold text-[var(--app-text)] shadow-sm transition active:scale-95 disabled:opacity-40"
+                :disabled="review.isSubmitting.value"
+                @click="review.showAnswer()"
               >
-                <Icon icon="solar:arrow-right-linear" class="h-6 w-6" />
+                {{ review.isAnswerVisible.value ? 'Answer Shown' : 'Show Answer' }}
+              </button>
+
+              <button
+                type="button"
+                class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+                :disabled="!reviewCard || review.isSubmitting.value"
+                @click="handleReviewSubmit('know')"
+              >
+                <Icon icon="solar:check-circle-bold-duotone" class="h-6 w-6" />
               </button>
             </div>
           </div>
         </div>
 
         <div
-          v-else-if="isReady && !currentCard"
-          class="flex flex-col items-center justify-center gap-3 text-sm text-[var(--app-text-muted)]"
+          v-else-if="!total"
+          class="flex w-full max-w-sm flex-col items-center justify-center gap-5 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/60 px-6 py-10 text-center"
           key="done"
         >
-          <p>You have reviewed all flashcards for this lesson.</p>
+          <div class="rounded-full bg-[var(--app-surface)] p-4 text-[var(--app-accent)] ring-1 ring-[var(--app-border)]">
+            <Icon icon="solar:card-2-bold-duotone" class="h-8 w-8" />
+          </div>
+          <div class="space-y-1">
+            <p class="text-base font-semibold text-[var(--app-text)]">No flashcards yet</p>
+            <p class="text-xs text-[var(--app-text-muted)]">
+              Generate or import a deck to start reviewing this lesson.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <button
+              class="rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/30 transition active:scale-95"
+              :disabled="isGenerationPending || isGenerating"
+              @click="handleGenerate"
+            >
+              Generate deck
+            </button>
+            <button
+              class="rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-2.5 text-sm font-semibold text-[var(--app-text)] transition active:scale-95"
+              @click="isImportModalOpen = true"
+            >
+              Import JSON
+            </button>
+          </div>
+        </div>
+        <div
+          v-else-if="review.isComplete.value"
+          class="flex w-full max-w-sm flex-col items-center justify-center gap-5 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/60 px-6 py-10 text-center"
+          key="review-done"
+        >
+          <div class="rounded-full bg-emerald-500/10 p-4 text-emerald-400 ring-1 ring-emerald-500/20">
+            <Icon icon="solar:check-circle-bold-duotone" class="h-8 w-8" />
+          </div>
+          <div class="space-y-1">
+            <p class="text-base font-semibold text-[var(--app-text)]">Review complete</p>
+            <p class="text-xs text-[var(--app-text-muted)]">
+              All wrong cards have now been cleared. Restart all if you want to review the whole deck again.
+            </p>
+          </div>
+          <div class="flex items-center gap-3 text-xs text-[var(--app-text-muted)]">
+            <span>{{ review.successCount }} good</span>
+            <span>•</span>
+            <span>{{ review.failureCount }} bad</span>
+          </div>
+          <button
+            type="button"
+            class="rounded-full bg-[var(--app-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--app-accent)]/30 transition active:scale-95"
+            @click="handleResetReview"
+          >
+            Review all again
+          </button>
         </div>
       </Transition>
     </div>
 
   </section>
+
+  <FlashcardJsonImportModal
+    :open="isImportModalOpen"
+    :lesson-id="lessonId"
+    @close="isImportModalOpen = false"
+    @imported="handleImported"
+  />
+
+  <FlashcardEditModal
+    :open="isEditModalOpen"
+    :lesson-id="lessonId"
+    :card="activeCard"
+    @close="isEditModalOpen = false"
+    @saved="handleEdited"
+  />
 </template>
 
 <style scoped>

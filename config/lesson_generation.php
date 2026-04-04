@@ -1,0 +1,103 @@
+<?php
+
+return [
+    'azure_openai' => [
+        'endpoint' => env('LINGAI_AZURE_OPENAI_ENDPOINT', env('AZURE_OPENAI_LESSON_SCRIPT_ENDPOINT', env('AZURE_OPENAI_ENDPOINT'))),
+        'api_key' => env('LINGAI_AZURE_OPENAI_API_KEY', env('AZURE_OPENAI_LESSON_SCRIPT_API_KEY', env('AZURE_OPENAI_API_KEY'))),
+        'api_version' => env('LINGAI_AZURE_OPENAI_API_VERSION', env('AZURE_OPENAI_LESSON_SCRIPT_API_VERSION', env('AZURE_OPENAI_API_VERSION', '2025-01-01-preview'))),
+        'deployment' => env('LINGAI_AZURE_OPENAI_LESSON_DEPLOYMENT', env('AZURE_OPENAI_DEPLOYMENT_LESSON_SCRIPT', env('AZURE_OPENAI_DEPLOYMENT'))),
+        'temperature' => (float) env('LINGAI_LESSON_TEMPERATURE', env('AZURE_OPENAI_LESSON_SCRIPT_TEMPERATURE', 0.3)),
+        'max_completion_tokens' => (int) env('LINGAI_LESSON_MAX_COMPLETION_TOKENS', env('AZURE_OPENAI_LESSON_SCRIPT_MAX_COMPLETION_TOKENS', 1800)),
+        'timeout' => (int) env('AZURE_OPENAI_LESSON_SCRIPT_TIMEOUT', 90),
+        'connect_timeout' => (int) env('AZURE_OPENAI_LESSON_SCRIPT_CONNECT_TIMEOUT', 10),
+        'use_v1' => (bool) env('LINGAI_AZURE_OPENAI_USE_V1', env('AZURE_OPENAI_LESSON_SCRIPT_USE_V1', env('AZURE_OPENAI_USE_V1', true))),
+    ],
+    'audio' => [
+        'disk' => env('LESSON_AUDIO_DISK', 'public'),
+        'directory' => env('LESSON_AUDIO_DIRECTORY', 'lessons'),
+        'format' => env('LESSON_AUDIO_FORMAT', 'mp3'),
+        'temp_directory' => env('LESSON_AUDIO_TEMP_DIRECTORY', 'lesson-audio'),
+        'speakers' => [
+            'coach' => env('LESSON_AUDIO_VOICE_COACH', env('AZURE_SPEECH_LESSON_AUDIO_VOICE_COACH')),
+            'helper' => env('LESSON_AUDIO_VOICE_HELPER', env('AZURE_SPEECH_LESSON_AUDIO_VOICE_HELPER')),
+        ],
+        'styles' => [
+            'use_segment_style' => (bool) env('LESSON_AUDIO_USE_SEGMENT_STYLE', false),
+            'allowed' => array_values(array_filter(array_map(
+                static fn (string $style) => trim($style),
+                explode(',', (string) env('LESSON_AUDIO_ALLOWED_STYLES', 'friendly,cheerful,gentle,calm,empathetic,customerservice,narration-professional'))
+            ))),
+        ],
+    ],
+    'read_aloud' => [
+        'disk' => env('LESSON_READ_ALOUD_DISK', env('LESSON_AUDIO_DISK', 'public')),
+        'directory' => env('LESSON_READ_ALOUD_DIRECTORY', 'lessons'),
+        'voice' => env('LESSON_READ_ALOUD_VOICE', env('AZURE_SPEECH_LESSON_READ_ALOUD_VOICE', '')),
+        'locale_fallback' => env('LESSON_READ_ALOUD_LOCALE_FALLBACK', 'en-US'),
+        'rate' => env('LESSON_READ_ALOUD_RATE', '-4%'),
+        'style' => env('LESSON_READ_ALOUD_STYLE', ''),
+        'format' => env('LESSON_READ_ALOUD_FORMAT', 'mp3'),
+        'break_ms' => (int) env('LESSON_READ_ALOUD_BREAK_MS', 420),
+        'sentence_break_ms' => (int) env('LESSON_READ_ALOUD_SENTENCE_BREAK_MS', 180),
+        'chunk' => [
+            'max_chars' => (int) env('LESSON_READ_ALOUD_CHUNK_MAX_CHARS', 420),
+        ],
+    ],
+    'shadowing_tts' => [
+        'disk' => env('SHADOWING_TTS_DISK', 'public'),
+        'directory' => env('SHADOWING_TTS_DIRECTORY', 'lesson_tts'),
+        'default_preset' => env('SHADOWING_TTS_DEFAULT_PRESET', 'standard'),
+        'output_format' => env('SHADOWING_TTS_OUTPUT_FORMAT', 'audio-24khz-48kbitrate-mono-mp3'),
+        'locale_map' => [
+            'en' => env('SHADOWING_TTS_LOCALE_EN', 'en-US'),
+            'nl' => env('SHADOWING_TTS_LOCALE_NL', 'nl-NL'),
+            'fa' => env('SHADOWING_TTS_LOCALE_FA', 'fa-IR'),
+        ],
+        'voice_map' => [
+            'en-US' => env('SHADOWING_TTS_VOICE_EN_US', 'en-US-JennyNeural'),
+            'nl-NL' => env('SHADOWING_TTS_VOICE_NL_NL', 'nl-NL-ColetteNeural'),
+            'fa-IR' => env('SHADOWING_TTS_VOICE_FA_IR', 'fa-IR-DilaraNeural'),
+        ],
+        'presets' => [
+            'beginner' => [
+                'first_pass_rate' => env('SHADOWING_TTS_BEGINNER_FIRST_RATE', '-2%'),
+                'second_pass_rate' => env('SHADOWING_TTS_BEGINNER_SECOND_RATE', '-18%'),
+                'final_pass_rate' => env('SHADOWING_TTS_BEGINNER_FINAL_RATE', '-2%'),
+                'first_pass_pitch' => env('SHADOWING_TTS_BEGINNER_FIRST_PITCH', '0%'),
+                'second_pass_pitch' => env('SHADOWING_TTS_BEGINNER_SECOND_PITCH', '-1%'),
+                'final_pass_pitch' => env('SHADOWING_TTS_BEGINNER_FINAL_PITCH', '0%'),
+                'between_first_and_second_pause_ms' => (int) env('SHADOWING_TTS_BEGINNER_PAUSE_1_MS', 520),
+                'repeat_pause_ms' => (int) env('SHADOWING_TTS_BEGINNER_REPEAT_PAUSE_MS', 2100),
+                'final_tail_pause_ms' => (int) env('SHADOWING_TTS_BEGINNER_TAIL_PAUSE_MS', 260),
+                'emphasis_level' => env('SHADOWING_TTS_BEGINNER_EMPHASIS_LEVEL', 'moderate'),
+                'output_format' => env('SHADOWING_TTS_BEGINNER_OUTPUT_FORMAT', env('SHADOWING_TTS_OUTPUT_FORMAT', 'audio-24khz-48kbitrate-mono-mp3')),
+            ],
+            'standard' => [
+                'first_pass_rate' => env('SHADOWING_TTS_STANDARD_FIRST_RATE', '0%'),
+                'second_pass_rate' => env('SHADOWING_TTS_STANDARD_SECOND_RATE', '-12%'),
+                'final_pass_rate' => env('SHADOWING_TTS_STANDARD_FINAL_RATE', '0%'),
+                'first_pass_pitch' => env('SHADOWING_TTS_STANDARD_FIRST_PITCH', '0%'),
+                'second_pass_pitch' => env('SHADOWING_TTS_STANDARD_SECOND_PITCH', '-1%'),
+                'final_pass_pitch' => env('SHADOWING_TTS_STANDARD_FINAL_PITCH', '0%'),
+                'between_first_and_second_pause_ms' => (int) env('SHADOWING_TTS_STANDARD_PAUSE_1_MS', 420),
+                'repeat_pause_ms' => (int) env('SHADOWING_TTS_STANDARD_REPEAT_PAUSE_MS', 1550),
+                'final_tail_pause_ms' => (int) env('SHADOWING_TTS_STANDARD_TAIL_PAUSE_MS', 220),
+                'emphasis_level' => env('SHADOWING_TTS_STANDARD_EMPHASIS_LEVEL', 'moderate'),
+                'output_format' => env('SHADOWING_TTS_STANDARD_OUTPUT_FORMAT', env('SHADOWING_TTS_OUTPUT_FORMAT', 'audio-24khz-48kbitrate-mono-mp3')),
+            ],
+            'intensive' => [
+                'first_pass_rate' => env('SHADOWING_TTS_INTENSIVE_FIRST_RATE', '+2%'),
+                'second_pass_rate' => env('SHADOWING_TTS_INTENSIVE_SECOND_RATE', '-8%'),
+                'final_pass_rate' => env('SHADOWING_TTS_INTENSIVE_FINAL_RATE', '0%'),
+                'first_pass_pitch' => env('SHADOWING_TTS_INTENSIVE_FIRST_PITCH', '0%'),
+                'second_pass_pitch' => env('SHADOWING_TTS_INTENSIVE_SECOND_PITCH', '0%'),
+                'final_pass_pitch' => env('SHADOWING_TTS_INTENSIVE_FINAL_PITCH', '+1%'),
+                'between_first_and_second_pause_ms' => (int) env('SHADOWING_TTS_INTENSIVE_PAUSE_1_MS', 320),
+                'repeat_pause_ms' => (int) env('SHADOWING_TTS_INTENSIVE_REPEAT_PAUSE_MS', 1000),
+                'final_tail_pause_ms' => (int) env('SHADOWING_TTS_INTENSIVE_TAIL_PAUSE_MS', 180),
+                'emphasis_level' => env('SHADOWING_TTS_INTENSIVE_EMPHASIS_LEVEL', 'reduced'),
+                'output_format' => env('SHADOWING_TTS_INTENSIVE_OUTPUT_FORMAT', env('SHADOWING_TTS_OUTPUT_FORMAT', 'audio-24khz-48kbitrate-mono-mp3')),
+            ],
+        ],
+    ],
+];

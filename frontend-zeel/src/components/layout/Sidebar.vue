@@ -7,6 +7,7 @@ const props = defineProps<{
   loading: boolean
   error: string
   selectedId: number | null
+  collapsed?: boolean
   q: string
   level: string
   resourceType: string
@@ -19,6 +20,7 @@ const emit = defineEmits<{
   'update:resource-type': [value: string]
   back: []
   create: []
+  'toggle-collapse': []
 }>()
 
 const levels = ['A2', 'B1', 'B2', 'C1']
@@ -35,12 +37,15 @@ const handleSelect = (id: number) => emit('select', id)
 
 <template>
   <aside
-    class="flex h-[calc(100vh-160px)] flex-col gap-4 rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-4 text-[var(--app-text)] shadow-[var(--app-card-shadow)] transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/70 dark:text-white"
+    class="flex h-[calc(100vh-160px)] flex-col gap-4 rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-4 text-[var(--app-text)] shadow-[var(--app-card-shadow)] transition-all duration-200 dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/70 dark:text-white"
+    :class="props.collapsed ? 'items-center px-3 py-4' : ''"
   >
-    <div class="flex items-center justify-between gap-2">
+    <div class="flex w-full items-center justify-between gap-2" :class="props.collapsed ? 'flex-col' : ''">
       <button
         type="button"
         class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-medium text-[var(--app-text)] transition active:scale-95"
+        :class="props.collapsed ? 'h-10 w-10 justify-center px-0' : ''"
+        :title="props.collapsed ? 'Back to workspaces' : undefined"
         @click="emit('back')"
       >
         <svg
@@ -52,18 +57,40 @@ const handleSelect = (id: number) => emit('select', id)
         >
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
         </svg>
-        <span>Back</span>
+        <span v-if="!props.collapsed">Back</span>
       </button>
-      <button
-        type="button"
-        class="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm shadow-[var(--app-accent)]/35 transition hover:bg-[var(--app-accent-strong)]"
-        @click="emit('create')"
-      >
-        <span class="mr-1 text-sm leading-none">+</span>
-        <span>New</span>
-      </button>
+      <div class="flex items-center gap-2" :class="props.collapsed ? 'flex-col' : ''">
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition hover:border-[var(--app-accent)] hover:text-[var(--app-accent-strong)]"
+          :class="props.collapsed ? 'h-10 w-10' : 'h-9 w-9'"
+          :title="props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          @click="emit('toggle-collapse')"
+        >
+          <svg
+            class="h-4 w-4 transition-transform duration-200"
+            :class="props.collapsed ? 'rotate-180' : ''"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19 8 12l7-7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-full bg-[var(--app-accent)] text-[11px] font-semibold text-white shadow-sm shadow-[var(--app-accent)]/35 transition hover:bg-[var(--app-accent-strong)]"
+          :class="props.collapsed ? 'h-10 w-10 px-0' : 'px-3 py-1.5'"
+          :title="props.collapsed ? 'New lesson' : undefined"
+          @click="emit('create')"
+        >
+          <span class="text-sm leading-none" :class="props.collapsed ? '' : 'mr-1'">+</span>
+          <span v-if="!props.collapsed">New</span>
+        </button>
+      </div>
     </div>
-    <div class="space-y-3">
+    <div v-if="!props.collapsed" class="w-full space-y-3">
       <p class="text-[11px] font-semibold uppercase tracking-[0.35em] text-[var(--app-text-muted)] dark:text-white/60">
         Lessons
       </p>
@@ -80,7 +107,7 @@ const handleSelect = (id: number) => emit('select', id)
         />
       </div>
     </div>
-    <div class="flex gap-2 text-sm">
+    <div v-if="!props.collapsed" class="flex w-full gap-2 text-sm">
       <select
         :value="level"
         class="flex-1 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-2 text-[var(--app-text)] focus:border-[var(--app-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--app-accent-soft)] dark:border-white/10 dark:bg-white/5 dark:text-white"
@@ -103,23 +130,33 @@ const handleSelect = (id: number) => emit('select', id)
         </option>
       </select>
     </div>
-    <div class="flex-1 overflow-hidden">
-      <div class="flex h-full flex-col overflow-y-auto pr-1">
+    <div class="flex-1 w-full overflow-hidden">
+      <div class="flex h-full flex-col overflow-y-auto" :class="props.collapsed ? 'pr-0' : 'pr-1'">
+        <p
+          v-if="props.collapsed"
+          class="mb-3 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--app-text-muted)] dark:text-white/45"
+          style="writing-mode: vertical-rl; text-orientation: mixed;"
+        >
+          Lessons
+        </p>
         <p
           v-if="loading"
           class="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)]/80 px-4 py-3 text-center text-sm text-[var(--app-text-muted)] dark:border-white/10 dark:bg-white/5 dark:text-white/70"
+          :class="props.collapsed ? 'px-2 py-4 text-[11px]' : ''"
         >
-          Loading lessons...
+          {{ props.collapsed ? '...' : 'Loading lessons...' }}
         </p>
         <p
           v-else-if="error"
           class="rounded-2xl border border-[var(--app-accent-strong)]/40 bg-[color:rgba(249,115,22,0.08)] px-4 py-3 text-sm text-[var(--app-accent-strong)] dark:border-[var(--app-accent-strong)]/60 dark:bg-[color:rgba(194,65,12,0.15)] dark:text-[var(--app-accent-strong)]"
+          :class="props.collapsed ? 'px-2 py-4 text-center text-[11px]' : ''"
         >
-          {{ error }}
+          {{ props.collapsed ? '!' : error }}
         </p>
         <LessonList
           v-else
           :lessons="lessons"
+          :collapsed="Boolean(props.collapsed)"
           :selected-id="selectedId"
           @select="handleSelect"
         />

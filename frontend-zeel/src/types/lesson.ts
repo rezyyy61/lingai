@@ -1,6 +1,6 @@
-export type LessonResourceType = 'text' | 'video' | 'audio' | 'youtube'
-export type LessonStatus = 'draft' | 'processing' | 'ready'
-export type LessonLevel = 'A2' | 'B1' | 'B2' | 'C1' | null
+export type LessonResourceType = 'text' | 'text_ai' | 'video' | 'audio' | 'youtube'
+export type LessonStatus = 'draft' | 'processing' | 'ready' | 'failed' | 'generating'
+export type LessonLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | null
 
 
 export interface Lesson {
@@ -13,6 +13,10 @@ export interface Lesson {
   status?: LessonStatus
   created_at: string
   original_text?: string | null
+  language?: string | null
+  audio_path?: string | null
+  audio_url?: string | null
+  analysis_meta?: LessonAnalysisMeta | null
 }
 
 export interface LessonWord {
@@ -34,22 +38,57 @@ export interface LessonWordDto {
   id: number
   lesson_id: number
   term: string
-  meaning: string
-  translation: string
+  meaning?: string | null
+  translation?: string | null
   example_sentence?: string | null
   phonetic?: string | null
   part_of_speech?: string | null
   meta?: unknown
+  review?: LessonWordReviewDto | null
 }
 
 export interface LessonFlashcard {
   id: number
+  lessonId?: number
   term: string
   meaning: string
   translation: string
   exampleSentence?: string | null
   phonetic?: string | null
   partOfSpeech?: string | null
+  review?: LessonWordReviewDto | null
+}
+
+export interface LessonWordInput {
+  term: string
+  lemma?: string | null
+  phonetic?: string | null
+  part_of_speech?: string | null
+  meaning?: string | null
+  example_sentence?: string | null
+  translation?: string | null
+  meta?: Record<string, unknown> | null
+}
+
+export interface LessonWordReviewDto {
+  status: 'new' | 'learning' | 'reviewing' | 'mastered'
+  next_review_at?: string | null
+  last_reviewed_at?: string | null
+  review_count: number
+  success_count: number
+  failure_count: number
+  streak: number
+  interval_seconds: number
+  ease_factor: number
+}
+
+export interface FlashcardReviewQueueResponse {
+  data: LessonWordDto[]
+  meta: {
+    due_count: number
+    lesson_id: number
+    limit: number
+  }
 }
 
 export interface LessonSentenceDto {
@@ -57,6 +96,7 @@ export interface LessonSentenceDto {
   lesson_id: number
   order_index: number
   text: string
+  tts_audio_url?: string | null
   translation?: string | null
   source: 'original' | 'generated'
   start_time?: number | null
@@ -71,10 +111,21 @@ export interface LessonShadowSentence {
   lessonId: number
   orderIndex: number
   text: string
+  ttsAudioUrl?: string | null
   translation?: string | null
   source: 'original' | 'generated'
   startTime?: number | null
   endTime?: number | null
+  meta?: Record<string, unknown> | null
+}
+
+export interface LessonSentenceInput {
+  text: string
+  translation?: string | null
+  source?: 'original' | 'generated' | null
+  start_time?: number | null
+  end_time?: number | null
+  meta?: Record<string, unknown> | null
 }
 
 
@@ -123,6 +174,26 @@ export interface LessonExerciseAttemptResponse {
 
 export interface LessonAnalysisMeta {
   language_direction?: 'rtl' | 'ltr' | null
+  audio_script?: {
+    spoken_segments?: {
+      type: string
+      speaker: string
+      style: string
+      pause_ms: number
+      text: string
+    }[] | null
+    spoken_script?: string | null
+    source_language_code?: string | null
+    [key: string]: unknown
+  } | null
+  audio_generation?: {
+    status?: 'processing' | 'ready' | 'failed' | null
+    voice?: string | null
+    voice_map?: Record<string, string> | null
+    format?: string | null
+    generated_at?: string | null
+    [key: string]: unknown
+  } | null
   [key: string]: unknown
 }
 

@@ -3,7 +3,9 @@ import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { LessonDetail } from '@/types/lesson'
 import { useLessonShadowing } from '@/composables/useLessonShadowing'
-import { fetchLessonSentenceTts, generateLessonShadowingSentences } from '@/api/lessonShadowing'
+import { deleteLessonSentence, fetchLessonSentenceTts, generateLessonShadowingSentences } from '@/api/lessonShadowing'
+import ShadowingSentenceEditModal from './shadowing/ShadowingSentenceEditModal.vue'
+import ShadowingSentenceJsonImportModal from './shadowing/ShadowingSentenceJsonImportModal.vue'
 
 const props = defineProps<{
   lesson: LessonDetail
@@ -144,6 +146,13 @@ const stopPolling = () => {
 }
 
 const isGenerating = ref(false)
+const isImportModalOpen = ref(false)
+const isEditModalOpen = ref(false)
+const isDeleting = ref(false)
+
+const handleReloadClick = () => {
+  reload()
+}
 
 const handleGenerate = async () => {
   if (isGenerating.value) return
@@ -161,6 +170,36 @@ const handleGenerate = async () => {
     pushToast('Could not start shadowing generation')
   } finally {
     isGenerating.value = false
+  }
+}
+
+const handleImported = async (count: number) => {
+  await reload()
+  pushToast(`${count} sentence${count > 1 ? 's' : ''} imported`)
+}
+
+const handleEdited = async () => {
+  await reload(activeSentence.value?.id ?? null)
+  pushToast('Sentence updated')
+}
+
+const handleDelete = async () => {
+  if (!activeSentence.value || isDeleting.value) return
+
+  const confirmed = window.confirm('Delete this sentence?')
+  if (!confirmed) return
+
+  isDeleting.value = true
+  try {
+    const currentId = activeSentence.value.id
+    await deleteLessonSentence(props.lesson.id, currentId)
+    await reload(currentId)
+    pushToast('Sentence deleted')
+  } catch (error) {
+    console.error(error)
+    pushToast('Could not delete sentence')
+  } finally {
+    isDeleting.value = false
   }
 }
 
@@ -234,6 +273,29 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
         </button>
         <button
           type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95"
+          @click="isImportModalOpen = true"
+        >
+          <span class="text-[10px] font-bold">Import JSON</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="!activeSentence"
+          @click="isEditModalOpen = true"
+        >
+          <span class="text-[10px] font-bold">Edit</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="!activeSentence || isDeleting"
+          @click="handleDelete"
+        >
+          <span class="text-[10px] font-bold">{{ isDeleting ? 'Deleting…' : 'Delete' }}</span>
+        </button>
+        <button
+          type="button"
           class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface-elevated)] text-[var(--app-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           :disabled="!isReady || !activeSentence"
           @click="isFocusMode = true"
@@ -276,7 +338,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
           <p>Could not load shadowing sentences.</p>
           <button
             class="rounded-full border border-[var(--app-accent-strong)] px-4 py-1.5 text-xs font-medium text-[var(--app-accent-strong)]"
-            @click="reload"
+            @click="handleReloadClick"
           >
             Try again
           </button>
@@ -292,7 +354,7 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
              </span>
              <button
                class="rounded-full border border-[var(--app-border)] px-4 py-1.5 text-xs font-medium text-[var(--app-text-muted)] transition hover:text-[var(--app-text)]"
-               @click="reload"
+               @click="handleReloadClick"
              >
                Check status
              </button>
@@ -481,6 +543,21 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
       </Transition>
     </div>
   </section>
+
+  <ShadowingSentenceJsonImportModal
+    :open="isImportModalOpen"
+    :lesson-id="lesson.id"
+    @close="isImportModalOpen = false"
+    @imported="handleImported"
+  />
+
+  <ShadowingSentenceEditModal
+    :open="isEditModalOpen"
+    :lesson-id="lesson.id"
+    :sentence="activeSentence"
+    @close="isEditModalOpen = false"
+    @saved="handleEdited"
+  />
 </template>
 
 <style scoped>

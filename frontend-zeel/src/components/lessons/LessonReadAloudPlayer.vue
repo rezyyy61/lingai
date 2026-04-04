@@ -12,36 +12,39 @@ const emit = defineEmits<{
   (e: 'playing-change', value: boolean): void
 }>()
 
-type Speed = 'slow' | 'normal' | 'fast'
-
 type ReadAloudRes = {
+  status?: 'pending' | 'processing' | 'ready' | 'failed'
   exists?: boolean
-  parts?: { index: number; url: string; chars: number }[]
-  speed?: Speed
+  audio_url?: string | null
   locale?: string
+  voice?: string | null
+  rate?: string | null
+  format?: string | null
+  chunk_count?: number | null
   generated_at?: string | null
 }
 
 const variant = computed(() => props.variant ?? 'inline')
-const speed = ref<Speed>('normal')
-
 const isLoading = ref(false)
 const error = ref('')
-
-const readyMap = ref<Record<Speed, boolean>>({
-  slow: false,
-  normal: false,
-  fast: false,
+const playbackRate = ref(1)
+const playbackRateOptions = [0.75, 0.9, 1]
+const state = ref<ReadAloudRes>({
+  status: 'pending',
+  exists: false,
+  audio_url: null,
 })
-
-const parts = ref<{ index: number; url: string; chars: number }[]>([])
-const currentIndex = ref(0)
+const audioElement = ref<HTMLAudioElement | null>(null)
 const isPlaying = ref(false)
-let audio: HTMLAudioElement | null = null
+let pollingTimer: number | null = null
 
-const isReadySelected = computed(() => readyMap.value[speed.value] === true)
-const canGenerateSelected = computed(() => !isLoading.value && !isReadySelected.value)
-const hasParts = computed(() => parts.value.length > 0)
+const status = computed(() => state.value.status ?? 'pending')
+const audioUrl = computed(() => {
+  const value = state.value.audio_url
+  return typeof value === 'string' && value.trim() !== '' ? value : null
+})
+const canGenerate = computed(() => !isLoading.value && status.value !== 'processing')
+const isReady = computed(() => status.value === 'ready' && !!audioUrl.value)
 
 const wrapperClass = computed(() => {
   if (variant.value === 'sheet') {
@@ -57,196 +60,189 @@ watch(
 )
 
 const destroyAudio = () => {
-  if (!audio) return
-  audio.pause()
-  audio.src = ''
-  audio.onended = null
-  audio.onpause = null
-  audio.onplay = null
-  audio = null
+  if (!audioElement.value) return
+  audioElement.value.pause()
   isPlaying.value = false
 }
 
-const setPartsAndReset = (p: { index: number; url: string; chars: number }[]) => {
-  destroyAudio()
-  parts.value = Array.isArray(p) ? p : []
-  currentIndex.value = 0
-  isPlaying.value = false
+const stopPolling = () => {
+  if (pollingTimer !== null) {
+    window.clearTimeout(pollingTimer)
+    pollingTimer = null
+  }
 }
 
-const playFrom = (idx: number) => {
-  if (!parts.value.length) return
-  const target = parts.value[idx]
-  if (!target?.url) return
-
-  destroyAudio()
-  currentIndex.value = idx
-
-  audio = new Audio(target.url)
-  audio.preload = 'auto'
-
-  audio.onended = () => {
-    const nextIdx = currentIndex.value + 1
-    if (nextIdx < parts.value.length) {
-      playFrom(nextIdx)
-      return
-    }
-    isPlaying.value = false
+const applyPlaybackRate = () => {
+  if (audioElement.value) {
+    audioElement.value.playbackRate = playbackRate.value
   }
-
-  audio.onplay = () => {
-    isPlaying.value = true
-  }
-
-  audio.onpause = () => {
-    isPlaying.value = false
-  }
-
-  audio.play().catch(() => {
-    isPlaying.value = false
-  })
 }
 
-const togglePlay = () => {
-  if (!audio) {
-    if (parts.value.length) playFrom(currentIndex.value)
-    return
-  }
-  if (audio.paused) audio.play().catch(() => {})
-  else audio.pause()
+const setPlaybackRate = (rate: number) => {
+  playbackRate.value = rate
+  applyPlaybackRate()
 }
 
-const fetchExistingFor = async (s: Speed) => {
-  const res = (await getLessonReadAloud(props.lessonId, { speed: s, format: 'mp3' })) as ReadAloudRes
-  const ok = !!(res && (res.exists === true || (res.parts && res.parts.length)))
-  readyMap.value[s] = ok
+const formattedGeneratedAt = computed(() => {
+  const raw = state.value.generated_at
+
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    return ''
+  }
+
+  const date = new Date(raw)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toLocaleString()
+})
+
+const refreshState = async () => {
+  const res = (await getLessonReadAloud(props.lessonId)) as ReadAloudRes
+  state.value = res
   return res
 }
 
-const refreshStatuses = async () => {
-  const [a, b, c] = await Promise.all([
-    fetchExistingFor('slow'),
-    fetchExistingFor('normal'),
-    fetchExistingFor('fast'),
-  ])
-  return { slow: a, normal: b, fast: c }
-}
-
-const loadSelectedIfExists = async () => {
-  error.value = ''
-  setPartsAndReset([])
-
+const pollUntilComplete = async () => {
   try {
-    const res = await fetchExistingFor(speed.value)
-    if (readyMap.value[speed.value] && res.parts?.length) {
-      setPartsAndReset(res.parts)
-    }
-  } catch (e) {
-    error.value = 'Failed to load saved audio.'
-    console.error(e)
-  }
-}
+    const latest = await refreshState()
 
-const generateSelected = async () => {
-  if (!canGenerateSelected.value) return
+    if (latest.status === 'ready' || latest.status === 'failed') {
+      isLoading.value = false
 
-  error.value = ''
-  isLoading.value = true
-  setPartsAndReset([])
+      if (latest.status === 'failed') {
+        error.value = 'Failed to generate read-aloud audio.'
+      }
 
-  try {
-    const res = (await generateLessonReadAloud(props.lessonId, {
-      speed: speed.value,
-      format: 'mp3',
-      mode: 'auto',
-      voice_pair: 'auto',
-    })) as ReadAloudRes
-
-    const p = res.parts || []
-    if (!p.length) {
-      readyMap.value[speed.value] = false
-      error.value = 'No audio generated.'
+      stopPolling()
       return
     }
 
-    readyMap.value[speed.value] = true
-    setPartsAndReset(p)
-    playFrom(0)
-
-    await refreshStatuses()
+    pollingTimer = window.setTimeout(() => {
+      void pollUntilComplete()
+    }, 2200)
   } catch (e) {
-    error.value = 'Failed to generate audio.'
     console.error(e)
-  } finally {
     isLoading.value = false
+    stopPolling()
+    error.value = 'Failed to refresh read-aloud status.'
   }
 }
 
-const speedLabel = (s: Speed) => (s === 'slow' ? 'Slow' : s === 'fast' ? 'Fast' : 'Normal')
+const generateReadAloud = async () => {
+  if (!canGenerate.value) return
+
+  error.value = ''
+  isLoading.value = true
+
+  try {
+    await generateLessonReadAloud(props.lessonId)
+    const latest = await refreshState()
+
+    if (latest.status === 'processing') {
+      stopPolling()
+      await pollUntilComplete()
+      return
+    }
+
+    isLoading.value = false
+  } catch (e: any) {
+    console.error(e)
+    isLoading.value = false
+    error.value = e?.response?.data?.errors?.lesson?.[0]
+      ?? e?.response?.data?.message
+      ?? 'Failed to generate read-aloud audio.'
+  }
+}
 
 watch(
   () => props.lessonId,
   async () => {
     destroyAudio()
     error.value = ''
-    readyMap.value = { slow: false, normal: false, fast: false }
-    setPartsAndReset([])
-    await refreshStatuses()
-    await loadSelectedIfExists()
+    stopPolling()
+    state.value = {
+      status: 'pending',
+      exists: false,
+      audio_url: null,
+    }
+
+    try {
+      const latest = await refreshState()
+
+      if (latest.status === 'processing') {
+        isLoading.value = true
+        void pollUntilComplete()
+        return
+      }
+    } catch (e) {
+      console.error(e)
+      error.value = 'Failed to load read-aloud audio.'
+    }
+
+    isLoading.value = false
   },
 )
 
 watch(
-  () => speed.value,
-  async () => {
-    await loadSelectedIfExists()
-  },
+  () => playbackRate.value,
+  () => applyPlaybackRate(),
 )
 
 onMounted(async () => {
-  await refreshStatuses()
-  await loadSelectedIfExists()
+  try {
+    const latest = await refreshState()
+
+    if (latest.status === 'processing') {
+      isLoading.value = true
+      void pollUntilComplete()
+    }
+  } catch (e) {
+    console.error(e)
+    error.value = 'Failed to load read-aloud audio.'
+  }
 })
 
 onBeforeUnmount(() => {
   destroyAudio()
+  stopPolling()
 })
 </script>
 
 <template>
   <div :class="wrapperClass">
-    <div class="grid grid-cols-3 gap-2">
-      <button
-        v-for="s in (['slow', 'normal', 'fast'] as const)"
-        :key="s"
-        class="rounded-xl border px-3 py-2 text-sm font-semibold transition flex items-center justify-center gap-2"
-        :class="speed === s
-          ? 'border-[var(--app-accent)] bg-[var(--app-surface)] text-[var(--app-text)]'
-          : 'border-[var(--app-border)] bg-[var(--app-panel-muted)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] hover:bg-[var(--app-surface)]/60'"
-        @click="speed = s"
-        :disabled="isLoading"
-      >
-        <span class="h-2 w-2 rounded-full" :class="readyMap[s] ? 'bg-emerald-500' : 'bg-[var(--app-border)]'" />
-        <span>{{ speedLabel(s) }}</span>
-      </button>
-    </div>
+    <div class="flex items-center justify-between gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-4 py-3">
+      <div class="min-w-0">
+        <p class="text-sm font-semibold text-[var(--app-text)]">Read Aloud</p>
+        <p class="mt-1 text-xs text-[var(--app-text-muted)]">
+          {{ status === 'ready'
+            ? 'Natural read-aloud audio is ready.'
+            : status === 'processing'
+              ? 'Generating read-aloud audio...'
+              : 'Generate natural audio from the original lesson text.' }}
+        </p>
+      </div>
 
-    <div
-      v-if="variant !== 'sheet'"
-      class="mt-3 flex items-center justify-between text-[11px] font-semibold text-[var(--app-text-muted)]"
-    >
-      <div class="flex items-center gap-2">
-        <span>Slow:</span>
-        <span :class="readyMap.slow ? 'text-emerald-400' : ''">{{ readyMap.slow ? 'Ready' : 'Not generated' }}</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <span>Normal:</span>
-        <span :class="readyMap.normal ? 'text-emerald-400' : ''">{{ readyMap.normal ? 'Ready' : 'Not generated' }}</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <span>Fast:</span>
-        <span :class="readyMap.fast ? 'text-emerald-400' : ''">{{ readyMap.fast ? 'Ready' : 'Not generated' }}</span>
-      </div>
+      <button
+        type="button"
+        class="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--app-accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--app-accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+        :disabled="!canGenerate"
+        @click="generateReadAloud"
+      >
+        <Icon
+          v-if="isLoading || status === 'processing'"
+          icon="svg-spinners:90-ring-with-bg"
+          class="h-4 w-4"
+        />
+        <Icon
+          v-else
+          icon="solar:play-circle-bold-duotone"
+          class="h-4 w-4"
+        />
+        <span>{{ status === 'ready' ? 'Regenerate' : 'Generate' }}</span>
+      </button>
     </div>
 
     <div
@@ -257,63 +253,53 @@ onBeforeUnmount(() => {
       {{ error }}
     </div>
 
-    <div v-if="hasParts" class="mt-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] px-3 py-2">
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <span
-            class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--app-surface)] text-[var(--app-text-muted)]"
-          >
-            <Icon icon="solar:music-library-bold-duotone" class="h-4 w-4" />
-          </span>
-          <div class="flex flex-col leading-tight">
-            <span class="text-[11px] font-semibold text-[var(--app-text-muted)]">
-              Audio • {{ speedLabel(speed) }}
-            </span>
-            <span class="text-[10px] text-[var(--app-text-muted)]/80">
-              Part {{ currentIndex + 1 }} / {{ parts.length }}
-            </span>
-          </div>
+    <div v-if="isReady && audioUrl" class="mt-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-4">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 text-xs text-[var(--app-text-muted)]">
+          <span v-if="state.chunk_count">Chunks: {{ state.chunk_count }}</span>
+          <span v-if="state.voice">Voice: {{ state.voice }}</span>
+          <span v-if="formattedGeneratedAt">{{ formattedGeneratedAt }}</span>
         </div>
 
-        <button
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--app-accent)] text-white shadow-sm hover:bg-[var(--app-accent-strong)] transition disabled:opacity-60 disabled:cursor-not-allowed"
-          @click="togglePlay"
-          :disabled="isLoading"
-          :title="isPlaying ? 'Pause audio' : 'Play audio'"
-        >
-          <Icon v-if="isPlaying" icon="solar:pause-bold" class="h-4 w-4" />
-          <Icon v-else icon="solar:play-bold" class="h-4 w-4" />
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-[var(--app-text-muted)]">Playback speed</span>
+          <button
+            v-for="rate in playbackRateOptions"
+            :key="rate"
+            type="button"
+            class="rounded-full border px-3 py-1 text-xs font-medium transition"
+            :class="playbackRate === rate
+              ? 'border-[var(--app-accent)] bg-[var(--app-accent)]/15 text-[var(--app-accent)]'
+              : 'border-[var(--app-border)] bg-transparent text-[var(--app-text-muted)] hover:text-[var(--app-text)]'"
+            @click="setPlaybackRate(rate)"
+          >
+            {{ rate }}x
+          </button>
+        </div>
       </div>
+
+      <audio
+        ref="audioElement"
+        class="w-full"
+        controls
+        preload="metadata"
+        :src="audioUrl"
+        @loadedmetadata="applyPlaybackRate"
+        @play="isPlaying = true"
+        @pause="isPlaying = false"
+        @ended="isPlaying = false"
+      />
     </div>
 
     <div
       v-else
-      class="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-3 text-xs text-[var(--app-text-muted)]"
+      class="mt-3 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel-muted)] p-3 text-xs text-[var(--app-text-muted)]"
     >
-      <span>
-        {{ isReadySelected ? 'Saved audio exists but parts are empty.' : 'No saved audio for this speed yet.' }}
-      </span>
-
-      <button
-        v-if="!isReadySelected"
-        type="button"
-        class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] hover:border-[var(--app-accent)] hover:bg-[var(--app-surface-elevated)] transition disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="!canGenerateSelected"
-        @click="generateSelected"
-        title="Generate audio"
-      >
-        <Icon
-          v-if="isLoading"
-          icon="svg-spinners:90-ring-with-bg"
-          class="h-4 w-4"
-        />
-        <Icon
-          v-else
-          icon="solar:add-circle-bold-duotone"
-          class="h-4 w-4"
-        />
-      </button>
+      {{ status === 'processing'
+        ? 'Read-aloud audio is being generated. It will appear here automatically when ready.'
+        : status === 'failed'
+          ? 'Read-aloud generation failed. Try again.'
+          : 'No read-aloud audio generated yet.' }}
     </div>
   </div>
 </template>

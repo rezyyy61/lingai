@@ -2,6 +2,7 @@
 
 namespace App\Services\Lessons;
 
+use App\Models\Lesson;
 use App\Services\Ai\LlmClient;
 use App\Services\Ai\Pipelines\ChunkedPromptRunner;
 use App\Services\Text\ChunkPlan;
@@ -14,14 +15,19 @@ class FastLessonWordsService
     public function __construct(
         protected LlmClient $llm,
         protected TextChunker $chunker,
-        protected ChunkedPromptRunner $runner
+        protected ChunkedPromptRunner $runner,
+        protected LessonWordPromptBuilder $promptBuilder,
+        protected LessonWordCandidateScorer $candidateScorer,
     ) {}
 
-    public function generate(string $text, string $targetLanguage = 'en', string $supportLanguage = 'en'): array
+    public function generate(Lesson $lesson, ?string $inlinePrompt = null): array
     {
         $provider = (string) config('services.openai.provider', 'openai');
+        $targetLanguage = (string) ($lesson->target_language ?? 'en');
+        $supportLanguage = (string) ($lesson->support_language ?? 'en');
+        $instructionContext = $this->promptBuilder->build($lesson, $inlinePrompt);
 
-        $rawText = (string) $text;
+        $rawText = (string) $lesson->original_text;
 
         // 1) Critical: decode entities + remove tags + normalize whitespace
         $fullText = $this->prepareLessonText($rawText);
@@ -53,9 +59,8 @@ class FastLessonWordsService
         $options = $this->llmOptionsForWords($provider);
 
         $all = [];
-        $merged = [];
 
-        // 4) Iterate chunks, stop early when enough
+        // 4) Stage A: chunk-level candidate extraction
         foreach ($plan->chunks as $i => $chunkText) {
             $chunkIndex = $i + 1;
 
@@ -69,7 +74,7 @@ class FastLessonWordsService
 
             $results = $this->runner->runJson(
                 plan: $singlePlan,
-                messagesFactory: function (string $t) use ($targetLanguage, $supportLanguage, $perChunkTarget, $perChunkMin, $chunkIndex, $plan) {
+                messagesFactory: function (string $t) use ($lesson, $targetLanguage, $supportLanguage, $perChunkTarget, $perChunkMin, $chunkIndex, $plan, $instructionContext) {
                     return [
                         [
                             'role' => 'system',
@@ -77,7 +82,8 @@ class FastLessonWordsService
                         ],
                         [
                             'role' => 'user',
-                            'content' => $this->promptWords(
+                            'content' => $this->promptBuilder->buildCandidateExtractionPrompt(
+                                lesson: $lesson,
                                 text: $t,
                                 target: $targetLanguage,
                                 support: $supportLanguage,
@@ -85,6 +91,7 @@ class FastLessonWordsService
                                 minCount: $perChunkMin,
                                 chunkIndex: $chunkIndex,
                                 chunksTotal: count($plan->chunks),
+                                instructionContext: $instructionContext,
                             ),
                         ],
                     ];
@@ -110,22 +117,18 @@ class FastLessonWordsService
                     $all[] = $w;
                 }
             }
-
-            $merged = $this->mergeAndRankWords(
-                words: $all,
-                fullText: $fullText,
-                desiredCount: $desired,
-                targetLanguage: $targetLanguage,
-                supportLanguage: $supportLanguage
-            );
-
-            if (count($merged) >= $desired) {
-                break;
-            }
         }
 
-        // 5) Fallback: one full-text pass if still insufficient
-        if (count($merged) < min($minItems, $desired)) {
+        // 5) Fallback candidate extraction from full text if pool is still too thin
+        $candidatePool = $this->mergeAndRankWords(
+            words: $all,
+            fullText: $fullText,
+            desiredCount: max($desired, (int) config('services.openai.words_final_candidate_limit', 36)),
+            targetLanguage: $targetLanguage,
+            supportLanguage: $supportLanguage
+        );
+
+        if (count($candidatePool) < min($minItems, $desired)) {
             $fallbackText = $this->shrinkText($fullText, $maxChars);
 
             $fallbackPlan = new ChunkPlan(
@@ -138,7 +141,7 @@ class FastLessonWordsService
 
             $fallbackResults = $this->runner->runJson(
                 plan: $fallbackPlan,
-                messagesFactory: function (string $t) use ($targetLanguage, $supportLanguage, $desired, $minItems) {
+                messagesFactory: function (string $t) use ($lesson, $targetLanguage, $supportLanguage, $desired, $minItems, $instructionContext, $maxItems) {
                     return [
                         [
                             'role' => 'system',
@@ -146,14 +149,16 @@ class FastLessonWordsService
                         ],
                         [
                             'role' => 'user',
-                            'content' => $this->promptWords(
+                            'content' => $this->promptBuilder->buildCandidateExtractionPrompt(
+                                lesson: $lesson,
                                 text: $t,
                                 target: $targetLanguage,
                                 support: $supportLanguage,
-                                count: $desired,
+                                count: max($desired, min($maxItems, $desired + 4)),
                                 minCount: min($minItems, $desired),
                                 chunkIndex: 0,
-                                chunksTotal: 0
+                                chunksTotal: 0,
+                                instructionContext: $instructionContext,
                             ),
                         ],
                     ];
@@ -182,28 +187,46 @@ class FastLessonWordsService
                 }
             }
 
-            $merged = $this->mergeAndRankWords(
-                words: array_merge($merged, $more),
+            $candidatePool = $this->mergeAndRankWords(
+                words: array_merge($candidatePool, $more),
                 fullText: $fullText,
-                desiredCount: $desired,
+                desiredCount: max($desired, (int) config('services.openai.words_final_candidate_limit', 36)),
                 targetLanguage: $targetLanguage,
                 supportLanguage: $supportLanguage
             );
         }
 
-        // 6) Final guard
-        if (count($merged) < min($minItems, $desired)) {
+        // 6) Stage B: global pedagogical shortlist + final full-text selection
+        $shortlist = $this->candidateScorer->shortlist(
+            $candidatePool,
+            $fullText,
+            (int) config('services.openai.words_final_candidate_limit', 36)
+        );
+
+        $final = $this->runFinalSelection(
+            lesson: $lesson,
+            fullText: $fullText,
+            shortlist: $shortlist,
+            targetLanguage: $targetLanguage,
+            supportLanguage: $supportLanguage,
+            desired: $desired,
+            minItems: $minItems,
+            instructionContext: $instructionContext,
+            options: $options,
+        );
+
+        if (count($final) < min($minItems, $desired)) {
             Log::warning('FastLessonWordsService: insufficient results', [
                 'pipeline' => 'lesson_words',
                 'provider' => $provider,
                 'desired' => $desired,
                 'min_items' => $minItems,
-                'got' => count($merged),
+                'got' => count($final),
             ]);
             return [];
         }
 
-        return array_values(array_slice($merged, 0, $desired));
+        return array_values(array_slice($final, 0, $desired));
     }
 
     /**
@@ -219,11 +242,10 @@ class FastLessonWordsService
                 'azure_deployment' => (string) config('services.openai.azure_deployment_words'),
                 'azure_api_version' => (string) config('services.openai.azure_api_version'),
                 'azure_use_v1' => (bool) config('services.openai.azure_use_v1', true),
-                'azure_words_use_max_completion_tokens' => (bool) config('services.openai.azure_words_use_max_completion_tokens', true),
+                'use_max_completion_tokens' => (bool) config('services.openai.azure_words_use_max_completion_tokens', true),
 
                 // Token controls
-                'max_tokens' => (int) config('services.openai.words_max_tokens', 900),
-                'max_completion_tokens' => (int) config('services.openai.words_max_completion_tokens', 700),
+                'max_output_tokens' => (int) config('services.openai.words_max_completion_tokens', 700),
 
                 // o4 / azure models may restrict temperature; your client already guards it.
                 'temperature' => 0.2,
@@ -234,90 +256,78 @@ class FastLessonWordsService
 
         return [
             'model' => (string) config('services.openai.fast_model', 'gpt-4.1-mini'),
-            'max_tokens' => (int) config('services.openai.words_max_tokens', 900),
+            'max_output_tokens' => (int) config('services.openai.words_max_tokens', 900),
             'temperature' => 0.2,
             'response_format' => $responseFormat,
         ];
     }
 
-    /**
-     * Prompt: strongly forces correct language + canonical spelling + phrases.
-     */
-    protected function promptWords(string $text, string $target, string $support, int $count, int $minCount, int $chunkIndex, int $chunksTotal): string
-    {
-        $targetMeta = $this->langMeta($target);
-        $supportMeta = $this->langMeta($support);
+    protected function runFinalSelection(
+        Lesson $lesson,
+        string $fullText,
+        array $shortlist,
+        string $targetLanguage,
+        string $supportLanguage,
+        int $desired,
+        int $minItems,
+        ?string $instructionContext,
+        array $options
+    ): array {
+        if ($shortlist === []) {
+            return [];
+        }
 
-        $chunkLine = $chunksTotal > 0
-            ? "Chunk: {$chunkIndex}/{$chunksTotal}"
-            : "Chunk: full text";
+        $prompt = $this->promptBuilder->buildFinalSelectionPrompt(
+            lesson: $lesson,
+            fullText: $this->shrinkText($fullText, (int) config('services.openai.words_final_text_max_chars', 9000)),
+            candidates: $shortlist,
+            target: $targetLanguage,
+            support: $supportLanguage,
+            count: $desired,
+            minCount: min($minItems, $desired),
+            instructionContext: $instructionContext,
+        );
 
-        return <<<TXT
-You are an expert language teacher and curriculum designer building a vocabulary pack for a language-learning app.
+        $finalOptions = $options;
+        $isAzureProvider = (string) config('services.openai.provider', 'openai') === 'azure';
+        $finalOptions['max_output_tokens'] = $isAzureProvider
+            ? (int) config('services.openai.words_final_max_completion_tokens', 1200)
+            : (int) config('services.openai.words_final_max_tokens', 1200);
+        $finalOptions['temperature'] = 0.1;
+        $finalOptions['response_format'] = ['type' => 'json_object'];
 
-Return ONLY a valid JSON object. No markdown. No extra keys. No extra text.
+        $res = $this->llm->chatJson([
+            [
+                'role' => 'system',
+                'content' => 'Return ONLY a valid JSON object. No markdown. No extra keys. No extra text.',
+            ],
+            [
+                'role' => 'user',
+                'content' => $prompt,
+            ],
+        ], $finalOptions);
 
-Schema (exact):
-{"words":[{"term":"","meaning":"","example_sentence":"","translation":""}]}
+        if ($res->ok && is_array($res->json) && is_array($res->json['words'] ?? null)) {
+            $selected = $this->mergeAndRankWords(
+                words: $res->json['words'],
+                fullText: $fullText,
+                desiredCount: $desired,
+                targetLanguage: $targetLanguage,
+                supportLanguage: $supportLanguage
+            );
 
-Goal:
-Pick the most useful, high-impact vocabulary needed to understand THIS text. Prefer common, reusable expressions learners actually use.
+            if (count($selected) >= min($minItems, $desired)) {
+                return $selected;
+            }
+        }
 
-Count:
-- Return EXACTLY {$count} items.
-- If truly impossible, return as many as possible but at least {$minCount}.
+        Log::warning('FastLessonWordsService: final selection fallback', [
+            'lesson_id' => $lesson->id,
+            'status' => $res->status,
+            'error' => $res->error,
+        ]);
 
-Hard constraints (MUST follow):
-- Output MUST be valid JSON and MUST match the schema exactly.
-- Every "term" MUST appear in the provided text EXACTLY as written (same casing, spaces, punctuation).
-- "term" MUST be a vocabulary item (word or short phrase), NOT a full sentence or clause.
-
-Term constraints (VERY STRICT):
-- "term" word count: 1 to 5 words ONLY.
-- "term" length: max 42 characters.
-- "term" MUST NOT contain newline characters.
-- "term" MUST NOT contain sentence punctuation: . ! ? ; :
-- "term" MUST NOT contain more than 1 comma.
-- "term" MUST NOT contain URLs, emails, hashtags, @handles, timestamps, raw numbers, or boilerplate UI/app text.
-- Avoid proper names (people/brands/places) unless they are essential learning items.
-- Prefer phrases (2–5 words) over single words when they carry meaning and appear in the text.
-
-Meaning (STRICT):
-- "meaning" must be a short learner-friendly explanation written ONLY in {$targetMeta['label']} ({$targetMeta['native']}).
-- Do NOT translate word-by-word; explain the sense used in THIS text.
-- Keep it concise (one short sentence or a phrase). No lists.
-
-Example sentence (STRICT):
-- "example_sentence" must be a NEW natural sentence written ONLY in {$targetMeta['label']} ({$targetMeta['native']}).
-- It MUST clearly demonstrate the same meaning as "meaning".
-- Keep it short, clear, realistic, and learner-friendly.
-- Do NOT copy a full sentence from the text. You may reuse the term, but the sentence must be newly written.
-
-Translation (VERY STRICT):
-- "translation" must be ONLY in {$supportMeta['label']} ({$supportMeta['native']}), even inside parentheses.
-- "translation" MUST translate the ENTIRE example_sentence naturally (human translation). Do NOT translate word-by-word.
-- If the term is idiomatic, translate the idiomatic meaning (not the literal words).
-- "translation" MUST match the exact sense used in example_sentence.
-- REQUIRED FORMAT (exact structure):
-  "{translated example_sentence} ({translated meaning of term})"
-  The part in parentheses MUST be a short natural translation of the term itself (same sense as meaning/example).
-- If you are not confident the translation is correct and natural (either sentence or term), set "translation" to "".
-
-Quality filters:
-- Avoid near-duplicates (same term with minor punctuation/plural changes).
-- Avoid overly generic words (e.g., "good", "very", "thing") unless they are key in context.
-- Prefer terms that are useful beyond this single text.
-
-Spelling / teaching constraints:
-- If the text explicitly teaches a correct spelling (e.g., it spells a word like "A I S L E"),
-  output ONLY the correct spelling form.
-- Do NOT include the common mistake form if the correct form also appears in the text.
-
-{$chunkLine}
-
-Text:
-{$text}
-TXT;
+        return $this->candidateScorer->shortlist($shortlist, $fullText, $desired);
     }
 
     /**
@@ -374,24 +384,7 @@ TXT;
             $kept = $this->enforceCanonicalEnglishTerms($kept);
         }
 
-        // Rank: frequency first, then longer phrases (often more informative)
-        $freq = [];
-        foreach ($kept as $it) {
-            $t = mb_strtolower((string) ($it['term'] ?? ''));
-            $freq[$t] = $t !== '' ? substr_count($fullLower, $t) : 0;
-        }
-
-        usort($kept, function ($a, $b) use ($freq) {
-            $ta = mb_strtolower((string) ($a['term'] ?? ''));
-            $tb = mb_strtolower((string) ($b['term'] ?? ''));
-
-            $fa = $freq[$ta] ?? 0;
-            $fb = $freq[$tb] ?? 0;
-
-            if ($fa !== $fb) return $fb <=> $fa;
-
-            return mb_strlen((string) ($b['term'] ?? '')) <=> mb_strlen((string) ($a['term'] ?? ''));
-        });
+        $kept = $this->candidateScorer->shortlist($kept, $fullText, $desiredCount);
 
         return array_values(array_slice($kept, 0, $desiredCount));
     }
@@ -705,26 +698,4 @@ TXT;
         return max($minPer, min($maxPer, $base));
     }
 
-    protected function langMeta(string $code): array
-    {
-        $code = strtolower(trim($code));
-        $supported = (array) config('learning_languages.supported', []);
-        $meta = $supported[$code] ?? null;
-
-        if (!is_array($meta)) {
-            return [
-                'code' => $code,
-                'label' => $code,
-                'native' => $code,
-                'direction' => 'ltr',
-            ];
-        }
-
-        return [
-            'code' => $code,
-            'label' => (string) ($meta['label'] ?? $code),
-            'native' => (string) ($meta['native'] ?? $code),
-            'direction' => (string) ($meta['direction'] ?? 'ltr'),
-        ];
-    }
 }

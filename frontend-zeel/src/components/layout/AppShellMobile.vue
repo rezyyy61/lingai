@@ -190,11 +190,6 @@ const goBackToWorkspaces = () => {
   router.push({ name: 'dashboard' })
 }
 
-const handleLessonUpdated = (lesson: LessonDetail) => {
-  selectedLesson.value = lesson
-  upsertLessonInSidebar(lesson)
-}
-
 const handleAnalysisToast = (message: string) => {
   analysisToastMessage.value = message
   if (analysisToastTimeout) {

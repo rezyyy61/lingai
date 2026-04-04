@@ -36,8 +36,17 @@ const query = reactive<LessonFilters>({
 })
 
 const sidebarOpen = ref(false)
+const desktopSidebarCollapsed = ref(false)
 const createModalOpen = ref(false)
 const loggingOut = ref(false)
+
+const DESKTOP_SIDEBAR_STORAGE_KEY = 'lingai:desktop-sidebar-collapsed'
+
+const desktopGridClass = computed(() =>
+  desktopSidebarCollapsed.value
+    ? 'xl:grid-cols-[92px_minmax(0,1fr)]'
+    : 'xl:grid-cols-[280px_minmax(0,1fr)]',
+)
 
 const workspaceId = computed<number | null>(() => {
   const raw = route.params.id
@@ -154,6 +163,10 @@ const closeSidebar = () => {
   sidebarOpen.value = false
 }
 
+const toggleDesktopSidebar = () => {
+  desktopSidebarCollapsed.value = !desktopSidebarCollapsed.value
+}
+
 const openCreateModal = () => {
   if (!workspaceId.value) return
   createModalOpen.value = true
@@ -184,17 +197,19 @@ const goBackToWorkspaces = () => {
   router.push({ name: 'dashboard' })
 }
 
-const handleLessonUpdated = (lesson: LessonDetail) => {
-  selectedLesson.value = lesson
-  upsertLessonInSidebar(lesson)
-}
-
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    desktopSidebarCollapsed.value = window.localStorage.getItem(DESKTOP_SIDEBAR_STORAGE_KEY) === '1'
+  }
   loadLessons()
 })
 
-onBeforeUnmount(() => {
+watch(desktopSidebarCollapsed, (value) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(DESKTOP_SIDEBAR_STORAGE_KEY, value ? '1' : '0')
 })
+
+onBeforeUnmount(() => {})
 
 </script>
 
@@ -210,9 +225,10 @@ onBeforeUnmount(() => {
         @logout="handleLogout"
       />
 
-      <div class="mt-6 grid items-start gap-6 xl:grid-cols-[280px_minmax(0,1.4fr)_minmax(0,1.3fr)]">
+      <div class="mt-6 grid items-start gap-6" :class="desktopGridClass">
         <Sidebar
           class="hidden xl:flex"
+          :collapsed="desktopSidebarCollapsed"
           :lessons="lessons"
           :loading="lessonsLoading"
           :error="lessonsError"
@@ -223,6 +239,7 @@ onBeforeUnmount(() => {
           @select="handleLessonClick"
           @back="goBackToWorkspaces"
           @create="openCreateModal"
+          @toggle-collapse="toggleDesktopSidebar"
         />
         <LessonWorkspace
           :lesson="selectedLesson"
@@ -250,12 +267,14 @@ onBeforeUnmount(() => {
           :loading="lessonsLoading"
           :error="lessonsError"
           :selected-id="selectedLesson?.id ?? null"
+          :collapsed="false"
           v-model:q="query.q"
           v-model:level="query.level"
           v-model:resource-type="query.resource_type"
           @select="handleLessonClick"
           @back="goBackToWorkspaces"
           @create="openCreateModal"
+          @toggle-collapse="toggleDesktopSidebar"
         />
       </div>
     </transition>

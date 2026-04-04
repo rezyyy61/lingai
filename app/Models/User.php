@@ -59,4 +59,9 @@ class User extends Authenticatable
         return $this->hasMany(Workspace::class, 'owner_id');
     }
 
+    public function lessonWordReviews()
+    {
+        return $this->hasMany(LessonWordReview::class);
+    }
+
 }

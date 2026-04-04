@@ -1,5 +1,5 @@
 import apiClient from '@/services/http'
-import type { LessonSentenceDto } from '@/types/lesson'
+import type { LessonSentenceDto, LessonSentenceInput } from '@/types/lesson'
 
 export async function fetchLessonSentences(
   lessonId: number,
@@ -15,6 +15,33 @@ export async function fetchLessonSentences(
 export async function fetchLessonSentenceTts(sentenceId: number): Promise<string> {
   const response = await apiClient.get(`/lesson-sentences/${sentenceId}/tts`)
   return response.data.audio_url as string
+}
+
+export async function importLessonSentences(
+  lessonId: number,
+  payload: {
+    replace_existing?: boolean
+    sentences: LessonSentenceInput[]
+  },
+): Promise<LessonSentenceDto[]> {
+  const response = await apiClient.post(`/lessons/${lessonId}/sentences/import`, payload)
+  return (response.data?.sentences ?? []) as LessonSentenceDto[]
+}
+
+export async function updateLessonSentence(
+  lessonId: number,
+  sentenceId: number,
+  payload: LessonSentenceInput,
+): Promise<LessonSentenceDto> {
+  const response = await apiClient.put(`/lessons/${lessonId}/sentences/${sentenceId}`, payload)
+  return response.data as LessonSentenceDto
+}
+
+export async function deleteLessonSentence(
+  lessonId: number,
+  sentenceId: number,
+): Promise<void> {
+  await apiClient.delete(`/lessons/${lessonId}/sentences/${sentenceId}`)
 }
 
 export interface GenerateShadowingPayload {

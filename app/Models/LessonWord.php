@@ -30,6 +30,11 @@ class LessonWord extends Model
         return $this->belongsToMany(LessonSentence::class, 'lesson_sentence_word');
     }
 
+    public function reviews()
+    {
+        return $this->hasMany(LessonWordReview::class);
+    }
+
     public function getTtsAudioUrlAttribute(): ?string
     {
         if (! $this->tts_audio_path) {

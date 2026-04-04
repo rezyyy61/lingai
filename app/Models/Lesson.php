@@ -59,4 +59,64 @@ class Lesson extends Model
         return $this->hasMany(LessonGrammarPoint::class);
     }
 
+    public function hasProcessableOriginalText(): bool
+    {
+        return trim((string) $this->original_text) !== '';
+    }
+
+    public function spokenAudioSegments(): array
+    {
+        $segments = data_get($this->analysis_meta, 'audio_script.spoken_segments');
+
+        if (! is_array($segments)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($segments as $segment) {
+            if (! is_array($segment)) {
+                continue;
+            }
+
+            $type = trim((string) ($segment['type'] ?? ''));
+            $speaker = trim((string) ($segment['speaker'] ?? ''));
+            $style = trim((string) ($segment['style'] ?? ''));
+            $text = trim((string) ($segment['text'] ?? ''));
+            $pause = $segment['pause_ms'] ?? null;
+
+            if ($type === '' || $speaker === '' || $style === '' || $text === '' || ! is_numeric($pause)) {
+                continue;
+            }
+
+            $normalized[] = [
+                'type' => $type,
+                'speaker' => $speaker,
+                'style' => $style,
+                'pause_ms' => max(0, (int) $pause),
+                'text' => $text,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    public function hasSpokenAudioSegments(): bool
+    {
+        return $this->spokenAudioSegments() !== [];
+    }
+
+    public function spokenAudioTranscript(): string
+    {
+        $segments = $this->spokenAudioSegments();
+
+        if ($segments !== []) {
+            return trim(implode("\n\n", array_map(
+                fn (array $segment) => $segment['text'],
+                $segments,
+            )));
+        }
+
+        return trim((string) data_get($this->analysis_meta, 'audio_script.spoken_script'));
+    }
 }

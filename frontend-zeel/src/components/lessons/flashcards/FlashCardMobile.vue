@@ -5,18 +5,72 @@
         class="flex h-full min-h-0 flex-col gap-3 px-4 pt-4"
         :style="{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }"
       >
-        <!-- Card area -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-3 py-1 text-[11px] font-semibold text-[color:var(--app-text-muted)]">
+              {{ review.dueCount }} due
+            </span>
+            <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-3 py-1 text-[11px] font-semibold text-emerald-300">
+              {{ review.successCount }} good
+            </span>
+            <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-3 py-1 text-[11px] font-semibold text-red-300">
+              {{ review.failureCount }} bad
+            </span>
+          </div>
+
+          <button
+            class="zee-card px-3 py-2 text-[11px] font-semibold"
+            type="button"
+            :disabled="review.isLoading.value"
+            @click="handleResetReview"
+          >
+            Restart all
+          </button>
+        </div>
+
+        <div class="grid grid-cols-4 gap-2">
+          <button
+            class="zee-btn py-2 text-[11px] font-semibold"
+            type="button"
+            :disabled="isGenerationPending || isGenerating"
+            @click="handleGenerate"
+          >
+            Generate
+          </button>
+          <button
+            class="zee-card py-2 text-[11px] font-semibold"
+            type="button"
+            @click="isImportModalOpen = true"
+          >
+            Import
+          </button>
+          <button
+            class="zee-card py-2 text-[11px] font-semibold disabled:opacity-40"
+            type="button"
+            :disabled="!activeCard"
+            @click="isEditModalOpen = true"
+          >
+            Edit
+          </button>
+          <button
+            class="zee-card py-2 text-[11px] font-semibold text-red-300 disabled:opacity-40"
+            type="button"
+            :disabled="!activeCard || isDeleting"
+            @click="handleDelete"
+          >
+            {{ isDeleting ? 'Deleting…' : 'Delete' }}
+          </button>
+        </div>
+
         <div class="flex-1 min-h-0">
-          <!-- Error -->
           <div v-if="isError" class="zee-card h-full overflow-hidden p-5">
             <div class="text-base font-semibold">Couldn’t load flashcards</div>
             <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">Try again.</div>
-            <button class="zee-btn mt-4 w-full py-3" type="button" @click="reload">
+            <button class="zee-btn mt-4 w-full py-3" type="button" @click="handleReloadClick">
               Reload
             </button>
           </div>
 
-          <!-- Loading -->
           <div v-else-if="isLoading" class="zee-card h-full overflow-hidden p-5">
             <div class="animate-pulse space-y-3">
               <div class="h-5 w-28 rounded bg-[color:var(--app-panel-muted)]"></div>
@@ -26,7 +80,6 @@
             </div>
           </div>
 
-          <!-- Empty (no pending) -->
           <div v-else-if="emptyStateVisible" class="zee-card h-full overflow-hidden p-5">
             <div class="text-base font-semibold">No flashcards yet</div>
             <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
@@ -40,9 +93,15 @@
             >
               Generate flashcards
             </button>
+            <button
+              class="zee-card mt-3 w-full py-3 text-sm font-semibold"
+              type="button"
+              @click="isImportModalOpen = true"
+            >
+              Import JSON
+            </button>
           </div>
 
-          <!-- Pending state -->
           <div v-else-if="isGenerationPending" class="zee-card h-full overflow-hidden p-5">
             <div class="text-base font-semibold">Generating…</div>
             <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
@@ -63,9 +122,8 @@
             </button>
           </div>
 
-          <!-- Ready: Flashcard -->
           <div
-            v-else-if="isReady && card"
+            v-else-if="displayCard"
             class="zee-card relative h-full overflow-hidden"
             :style="cardStyle"
             @pointerdown="onPointerDown"
@@ -82,7 +140,6 @@
             @keydown.enter.prevent="flip"
             @keydown.space.prevent="flip"
           >
-            <!-- subtle glow -->
             <div
               class="pointer-events-none absolute -inset-10 opacity-60 blur-3xl"
               :style="{ background: 'radial-gradient(60% 60% at 50% 10%, var(--app-accent-soft) 0%, transparent 70%)' }"
@@ -90,12 +147,11 @@
 
             <div class="relative h-full w-full flip-perspective">
               <div class="h-full w-full flip-inner" :class="isFlipped ? 'is-flipped' : ''">
-                <!-- FRONT -->
                 <div class="face p-5">
                   <div class="flex h-full min-h-0 flex-col">
                     <div class="flex items-start justify-between">
                       <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[11px] font-semibold text-[color:var(--app-text-muted)]">
-                        Front
+                        Prompt
                       </span>
 
                       <button
@@ -112,10 +168,10 @@
 
                     <div class="flex flex-1 min-h-0 flex-col items-center justify-center text-center px-2">
                       <div class="text-[36px] font-semibold leading-[1.08] tracking-tight">
-                        {{ card.term }}
+                        {{ displayCard.term }}
                       </div>
                       <div class="mt-3 text-xs font-medium text-[color:var(--app-text-muted)]">
-                        Tap to flip • Swipe to change
+                        Tap to flip • Swipe left/right to review
                       </div>
                     </div>
 
@@ -123,17 +179,18 @@
                       <span v-if="isLoadingAudio">Loading audio…</span>
                       <span v-else-if="cardHasTts">Audio ready</span>
                       <span v-else>Play available</span>
-                      <span class="font-semibold">{{ reviewed }}/{{ total }}</span>
+                      <span class="font-semibold">
+                        {{ `${review.reviewedCount.value + 1}/${Math.max(review.sessionInitialCount.value, 1)}` }}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <!-- BACK -->
                 <div class="face back p-5">
                   <div class="flex h-full min-h-0 flex-col">
                     <div class="flex items-start justify-between">
                       <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[11px] font-semibold text-[color:var(--app-text-muted)]">
-                        Back
+                        Answer
                       </span>
 
                       <button
@@ -152,7 +209,7 @@
                       <div class="rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] p-4">
                         <div class="text-[11px] font-semibold tracking-wide text-[color:var(--app-text-muted)]">Translation</div>
                         <div class="mt-1 text-2xl font-semibold leading-tight" dir="auto">
-                          {{ card.translation || '—' }}
+                          {{ displayCard.translation || '—' }}
                         </div>
                       </div>
 
@@ -160,7 +217,7 @@
                         <div class="overflow-hidden">
                           <div class="text-[11px] font-semibold tracking-wide text-[color:var(--app-text-muted)]">Meaning</div>
                           <div class="mt-1 text-sm leading-relaxed clamp-3">
-                            {{ card.meaning || '—' }}
+                            {{ displayCard.meaning || '—' }}
                           </div>
                         </div>
 
@@ -174,8 +231,8 @@
                     </div>
 
                     <div class="mt-3 flex items-center justify-between text-xs text-[color:var(--app-text-muted)]">
-                      <span>Tap to flip back</span>
-                      <span class="font-semibold">{{ card.id ? `#${card.id}` : '' }}</span>
+                      <span>Swipe left bad • Swipe right good</span>
+                      <span class="font-semibold">{{ displayCard.id ? `#${displayCard.id}` : '' }}</span>
                     </div>
                   </div>
                 </div>
@@ -183,7 +240,21 @@
             </div>
           </div>
 
-          <!-- Fallback -->
+          <div v-else-if="total" class="zee-card h-full overflow-hidden p-5">
+            <div class="text-base font-semibold">Review complete</div>
+            <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
+              All wrong cards have now been cleared. Restart all if you want to see the whole deck again.
+            </div>
+            <div class="mt-4 flex items-center gap-2 text-xs text-[color:var(--app-text-muted)]">
+              <span>{{ review.successCount }} good</span>
+              <span>•</span>
+              <span>{{ review.failureCount }} bad</span>
+            </div>
+            <button class="zee-btn mt-5 w-full py-3" type="button" @click="handleResetReview">
+              Review all again
+            </button>
+          </div>
+
           <div v-else class="zee-card h-full overflow-hidden p-5">
             <div class="text-base font-semibold">Nothing to show</div>
             <button
@@ -197,40 +268,38 @@
           </div>
         </div>
 
-        <!-- Actions -->
         <div class="mt-2 grid grid-cols-3 gap-3">
           <button
-            class="zee-card flex h-9 w-9 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto"
+            class="zee-card flex h-11 w-11 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto text-red-300"
             type="button"
-            :disabled="!hasPrev"
-            @click="goPrevLocal"
-            aria-label="Previous card"
+            :disabled="review.isSubmitting.value || !displayCard"
+            @click="handleReviewSubmit('dont_know')"
+            aria-label="Don't know"
           >
-            <Icon icon="solar:arrow-left-outline" class="h-4 w-4" />
+            <Icon icon="solar:close-circle-bold-duotone" class="h-6 w-6" />
           </button>
 
           <button
             class="zee-btn py-2 text-xs font-semibold"
             type="button"
+            :disabled="!displayCard"
             @click="flip"
-            :disabled="!isReady || !card"
           >
-            Flip
+            {{ isFlipped ? 'Answer shown' : 'Show answer' }}
           </button>
 
           <button
-            class="zee-card flex h-9 w-9 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto"
+            class="zee-card flex h-11 w-11 items-center justify-center rounded-full active:scale-[0.99] disabled:opacity-40 mx-auto text-emerald-400"
             type="button"
-            :disabled="!hasNext"
-            @click="goNextLocal"
-            aria-label="Next card"
+            :disabled="review.isSubmitting.value || !displayCard"
+            @click="handleReviewSubmit('know')"
+            aria-label="Know"
           >
-            <Icon icon="solar:arrow-right-outline" class="h-4 w-4" />
+            <Icon icon="solar:check-circle-bold-duotone" class="h-6 w-6" />
           </button>
         </div>
       </div>
 
-      <!-- Toast -->
       <transition name="fade">
         <div v-if="toastMessage" class="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 px-4">
           <div class="flex items-center gap-2 rounded-full border border-white/10 bg-[var(--app-surface-dark-elevated)]/90 px-4 py-2.5 text-xs font-medium text-white shadow-xl backdrop-blur-md">
@@ -241,42 +310,56 @@
       </transition>
     </div>
   </section>
+
+  <FlashcardJsonImportModal
+    :open="isImportModalOpen"
+    :lesson-id="lessonId"
+    @close="isImportModalOpen = false"
+    @imported="handleImported"
+  />
+
+  <FlashcardEditModal
+    :open="isEditModalOpen"
+    :lesson-id="lessonId"
+    :card="activeCard"
+    @close="isEditModalOpen = false"
+    @saved="handleEdited"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useFlashcardReview } from '@/composables/useFlashcardReview'
 import { useLessonFlashcards } from '@/composables/useLessonFlashcards'
-import { fetchLessonWordTts, generateLessonFlashcards } from '@/api/lessonFlashcards'
+import { deleteLessonWord, fetchLessonWordTts, generateLessonFlashcards } from '@/api/lessonFlashcards'
+import FlashcardEditModal from './FlashcardEditModal.vue'
+import FlashcardJsonImportModal from './FlashcardJsonImportModal.vue'
 
 const props = defineProps<{ lessonId: number }>()
 
-/**
- * Use existing system (same as old component)
- */
 const {
   currentCard,
   total,
-  reviewed,
-  remaining,
   isLoading,
   isError,
   isEmpty,
   isReady,
-  hasPrev,
-  hasNext,
-  goNext,
-  goPrev,
   reload,
 } = useLessonFlashcards(props.lessonId)
 
-const progressPercent = computed(() => (total.value === 0 ? 0 : Math.round((reviewed.value / total.value) * 100)))
+const review = useFlashcardReview(props.lessonId)
+const displayCard = computed(() => review.currentCard.value)
+const activeCard = computed(() => review.currentCard.value ?? currentCard.value)
 
-/**
- * Generate + polling system
- */
 const isGenerationPending = ref(false)
 const isGenerationTimedOut = ref(false)
+const isGenerating = ref(false)
+const isImportModalOpen = ref(false)
+const isEditModalOpen = ref(false)
+const isDeleting = ref(false)
+const isFlipped = ref(false)
+const didSwipe = ref(false)
 
 const toastMessage = ref('')
 let toastTimeout: number | null = null
@@ -352,7 +435,9 @@ const manualReload = () => {
   reload()
 }
 
-const isGenerating = ref(false)
+const handleReloadClick = () => {
+  reload()
+}
 
 const handleGenerate = async () => {
   if (isGenerating.value) return
@@ -364,8 +449,8 @@ const handleGenerate = async () => {
   try {
     await generateLessonFlashcards(props.lessonId, { replace_existing: true })
     pushToast('Vocabulary extraction started')
-  } catch (e) {
-    console.error(e)
+  } catch (error) {
+    console.error(error)
     isGenerationPending.value = false
     persistGenerationState(false)
     stopPolling()
@@ -375,9 +460,64 @@ const handleGenerate = async () => {
   }
 }
 
+const handleResetReview = async () => {
+  await review.reset()
+  isFlipped.value = false
+  if (!review.currentCard.value) {
+    pushToast('No flashcards are available to review')
+  }
+}
+
+const handleReviewSubmit = async (result: 'know' | 'dont_know') => {
+  if (!displayCard.value) {
+    return
+  }
+
+  await review.submit(result)
+  isFlipped.value = false
+
+  if (review.isComplete.value) {
+    pushToast('Review session complete')
+  }
+}
+
+const handleImported = async (count: number) => {
+  await reload()
+  await review.start()
+  pushToast(`${count} flashcard${count > 1 ? 's' : ''} imported`)
+}
+
+const handleEdited = async () => {
+  await reload(activeCard.value?.id ?? null)
+  await review.start()
+  pushToast('Flashcard updated')
+}
+
+const handleDelete = async () => {
+  if (!activeCard.value || isDeleting.value) return
+  const confirmed = window.confirm(`Delete "${activeCard.value.term}"?`)
+  if (!confirmed) return
+
+  isDeleting.value = true
+  try {
+    await deleteLessonWord(props.lessonId, activeCard.value.id)
+    await reload()
+    await review.start()
+    pushToast('Flashcard deleted')
+  } catch (error) {
+    console.error(error)
+    pushToast('Could not delete flashcard')
+  } finally {
+    isDeleting.value = false
+  }
+}
+
 watch(isReady, (ready) => {
   if (ready) {
-    if (isGenerationPending.value) pushToast('Vocabulary is ready')
+    if (isGenerationPending.value) {
+      pushToast('Vocabulary is ready')
+      review.start()
+    }
     isGenerationPending.value = false
     isGenerationTimedOut.value = false
     persistGenerationState(false)
@@ -391,30 +531,31 @@ watch(isGenerationPending, (pending) => {
   persistGenerationState(pending)
 })
 
+watch(
+  () => displayCard.value?.id,
+  () => {
+    isFlipped.value = false
+    stopAudio()
+    const card = displayCard.value as any
+    audioUrl.value = card?.tts_audio_url ?? card?.tts_audio_path ?? null
+  },
+)
+
 onMounted(() => {
   const pending = loadGenerationState()
   if (pending) {
     isGenerationPending.value = true
     startPolling()
   }
+  review.start()
 })
 
 onBeforeUnmount(() => {
   if (toastTimeout) clearTimeout(toastTimeout)
   stopPolling()
+  stopAudio()
 })
 
-/**
- * Card binding
- */
-const card = computed(() => currentCard.value ?? null)
-const isFlipped = ref(false)
-const didSwipe = ref(false)
-watch(() => card.value?.id, () => (isFlipped.value = false))
-
-/**
- * Swipe UI (local only)
- */
 const startX = ref<number | null>(null)
 const deltaX = ref(0)
 const isDragging = ref(false)
@@ -427,7 +568,7 @@ const cardStyle = computed(() => {
 })
 
 function flip() {
-  if (!isReady.value || !card.value) return
+  if (!displayCard.value) return
   if (didSwipe.value) {
     didSwipe.value = false
     return
@@ -435,60 +576,52 @@ function flip() {
   isFlipped.value = !isFlipped.value
 }
 
-function goNextLocal() {
-  if (!hasNext.value) return
-  isFlipped.value = false
-  goNext()
-}
-function goPrevLocal() {
-  if (!hasPrev.value) return
-  isFlipped.value = false
-  goPrev()
-}
-
-function onPointerDown(e: PointerEvent) {
-  if (!isReady.value || !card.value) return
-  startX.value = e.clientX
+function onPointerDown(event: PointerEvent) {
+  if (!displayCard.value) return
+  startX.value = event.clientX
   deltaX.value = 0
   isDragging.value = true
 }
-function onPointerMove(e: PointerEvent) {
+
+function onPointerMove(event: PointerEvent) {
   if (!isDragging.value || startX.value === null) return
-  const dx = e.clientX - startX.value
+  const dx = event.clientX - startX.value
   deltaX.value = Math.max(-140, Math.min(140, dx))
 }
+
 function onPointerUp() {
   if (!isDragging.value) return
   isDragging.value = false
 
   const dx = deltaX.value
   const threshold = 70
+
   if (dx <= -threshold) {
     didSwipe.value = true
-    goNextLocal()
+    handleReviewSubmit('dont_know')
   } else if (dx >= threshold) {
     didSwipe.value = true
-    goPrevLocal()
+    handleReviewSubmit('know')
   }
 
   deltaX.value = 0
   startX.value = null
 }
 
-function onTouchStart(e: TouchEvent) {
-  if (!isReady.value || !card.value) return
-  const t = e.touches[0]
-  if (!t) return
-  startX.value = t.clientX
+function onTouchStart(event: TouchEvent) {
+  if (!displayCard.value) return
+  const touch = event.touches[0]
+  if (!touch) return
+  startX.value = touch.clientX
   deltaX.value = 0
   isDragging.value = true
 }
 
-function onTouchMove(e: TouchEvent) {
+function onTouchMove(event: TouchEvent) {
   if (!isDragging.value || startX.value === null) return
-  const t = e.touches[0]
-  if (!t) return
-  const dx = t.clientX - startX.value
+  const touch = event.touches[0]
+  if (!touch) return
+  const dx = touch.clientX - startX.value
   deltaX.value = Math.max(-140, Math.min(140, dx))
 }
 
@@ -496,32 +629,19 @@ function onTouchEnd() {
   onPointerUp()
 }
 
-/**
- * Shuffle: we keep it simple (UI-only) by doing multiple next jumps
- * (If you want real shuffle order, do it in composable later.)
- */
-function shuffleOrder() {
-  if (!isReady.value || total.value < 2) return
-  const jumps = Math.min(5, total.value - 1)
-  for (let i = 0; i < jumps; i++) goNext()
-}
-
-/**
- * Audio (same as before but uses card.id)
- */
 const isLoadingAudio = ref(false)
 const isPlaying = ref(false)
 const audioUrl = ref<string | null>(null)
 let audio: HTMLAudioElement | null = null
 
 const cardHasTts = computed(() => {
-  const c: any = card.value
-  return !!(c?.tts_audio_url || c?.tts_audio_path)
+  const card: any = displayCard.value
+  return !!(card?.tts_audio_url || card?.tts_audio_path)
 })
 
 const cardExample = computed(() => {
-  const c: any = card.value
-  return c?.exampleSentence ?? c?.example_sentence ?? ''
+  const card: any = displayCard.value
+  return card?.exampleSentence ?? card?.example_sentence ?? ''
 })
 
 function stopAudio() {
@@ -535,7 +655,7 @@ function stopAudio() {
 
 async function playAudio(event?: Event) {
   event?.stopPropagation()
-  if (!card.value?.id) return
+  if (!displayCard.value?.id) return
 
   if (audio && isPlaying.value) {
     audio.pause()
@@ -547,11 +667,12 @@ async function playAudio(event?: Event) {
     isLoadingAudio.value = true
 
     if (!audioUrl.value) {
-      const c: any = card.value
-      audioUrl.value = c?.tts_audio_url ?? c?.tts_audio_path ?? null
+      const card: any = displayCard.value
+      audioUrl.value = card?.tts_audio_url ?? card?.tts_audio_path ?? null
     }
+
     if (!audioUrl.value) {
-      audioUrl.value = await fetchLessonWordTts(card.value.id)
+      audioUrl.value = await fetchLessonWordTts(displayCard.value.id)
     }
 
     audio = new Audio(audioUrl.value)
@@ -566,16 +687,6 @@ async function playAudio(event?: Event) {
     isLoadingAudio.value = false
   }
 }
-
-watch(
-  () => card.value?.id,
-  async () => {
-    stopAudio()
-    const c: any = card.value
-    audioUrl.value = c?.tts_audio_url ?? c?.tts_audio_path ?? null
-    await nextTick()
-  },
-)
 
 const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.value)
 </script>
@@ -607,7 +718,6 @@ const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.v
   overflow: hidden;
 }
 
-/* toast fade */
 .fade-enter-active,
 .fade-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
 .fade-enter-from { opacity: 0; transform: translateY(8px); }

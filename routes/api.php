@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\LanguageController;
+use App\Http\Controllers\Api\LessonAudioController;
+use App\Http\Controllers\Api\LessonAudioScriptController;
 use App\Http\Controllers\Api\LessonController;
 use App\Http\Controllers\Api\LessonExerciseController;
 use App\Http\Controllers\Api\LessonFromAudioController;
@@ -11,6 +13,7 @@ use App\Http\Controllers\Api\LessonSentenceController;
 use App\Http\Controllers\Api\LessonSentenceTtsController;
 use App\Http\Controllers\Api\LessonWordController;
 use App\Http\Controllers\Api\LessonWordTtsController;
+use App\Http\Controllers\Api\FlashcardReviewController;
 use App\Http\Controllers\Api\SpeakingPracticeController;
 use App\Http\Controllers\Api\WorkspaceController;
 use Illuminate\Http\Request;
@@ -36,6 +39,8 @@ Route::middleware('auth:sanctum')->group(function () {
         'destroy',
     ]);
     Route::post('lessons/{lesson}/analysis/generate', [LessonController::class, 'generateAnalysis']);
+    Route::post('lessons/{lesson}/audio-script', [LessonAudioScriptController::class, 'store']);
+    Route::post('lessons/{lesson}/audio', [LessonAudioController::class, 'store']);
     Route::post('/workspaces/{workspace}/lessons/generate', [LessonController::class, 'generate']);
 
     Route::post('workspaces/{workspace}/lessons/from-audio', [LessonFromAudioController::class, 'store']);
@@ -43,14 +48,22 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     Route::get('lessons/{lesson}/words', [LessonWordController::class, 'index']);
+    Route::get('lessons/{lesson}/words/review', [FlashcardReviewController::class, 'index']);
+    Route::post('lessons/{lesson}/words/review/reset', [FlashcardReviewController::class, 'reset']);
     Route::post('lessons/{lesson}/words', [LessonWordController::class, 'store']);
+    Route::post('lessons/{lesson}/words/import', [LessonWordController::class, 'import']);
     Route::post('lessons/{lesson}/words/generate', [LessonWordController::class, 'generate']);
     Route::get('lessons/{lesson}/words/{word}', [LessonWordController::class, 'show']);
     Route::put('lessons/{lesson}/words/{word}', [LessonWordController::class, 'update']);
     Route::delete('lessons/{lesson}/words/{word}', [LessonWordController::class, 'destroy']);
+    Route::post('lesson-words/review', [FlashcardReviewController::class, 'store']);
 
     Route::get('lessons/{lesson}/sentences', [LessonSentenceController::class, 'index']);
+    Route::post('lessons/{lesson}/sentences', [LessonSentenceController::class, 'store']);
+    Route::post('lessons/{lesson}/sentences/import', [LessonSentenceController::class, 'import']);
     Route::get('lessons/{lesson}/sentences/{sentence}', [LessonSentenceController::class, 'show']);
+    Route::put('lessons/{lesson}/sentences/{sentence}', [LessonSentenceController::class, 'update']);
+    Route::delete('lessons/{lesson}/sentences/{sentence}', [LessonSentenceController::class, 'destroy']);
     Route::post('lessons/{lesson}/sentences/generate', [LessonSentenceController::class, 'generate']);
 
     Route::get('lesson-words/{word}/tts', [LessonWordTtsController::class, 'show']);

@@ -5,13 +5,52 @@
         class="flex h-full min-h-0 flex-col gap-3 px-4 pt-4"
         :style="{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }"
       >
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-3 py-1 text-[11px] font-semibold text-[color:var(--app-text-muted)]">
+            {{ progressLabel }}
+          </span>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              class="zee-btn px-3 py-2 text-[11px] font-semibold"
+              type="button"
+              :disabled="isGenerationPending || isGenerating"
+              @click="handleGenerate"
+            >
+              Generate
+            </button>
+            <button
+              class="zee-card px-3 py-2 text-[11px] font-semibold"
+              type="button"
+              @click="isImportModalOpen = true"
+            >
+              Import
+            </button>
+            <button
+              class="zee-card px-3 py-2 text-[11px] font-semibold disabled:opacity-40"
+              type="button"
+              :disabled="!activeSentence"
+              @click="isEditModalOpen = true"
+            >
+              Edit
+            </button>
+            <button
+              class="zee-card px-3 py-2 text-[11px] font-semibold text-red-300 disabled:opacity-40"
+              type="button"
+              :disabled="!activeSentence || isDeleting"
+              @click="handleDelete"
+            >
+              {{ isDeleting ? 'Deleting…' : 'Delete' }}
+            </button>
+          </div>
+        </div>
+
         <!-- Main card -->
         <div class="flex-1 min-h-0">
           <!-- Error -->
           <div v-if="isError" class="zee-card h-full overflow-hidden p-5">
             <div class="text-base font-semibold">Couldn’t load sentences</div>
             <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">Try again.</div>
-            <button class="zee-btn mt-4 w-full py-3" type="button" @click="reload">
+            <button class="zee-btn mt-4 w-full py-3" type="button" @click="handleReloadClick">
               Reload
             </button>
           </div>
@@ -58,7 +97,7 @@
               </div>
             </div>
 
-            <button class="zee-btn mt-5 w-full py-3" type="button" @click="reload">
+            <button class="zee-btn mt-5 w-full py-3" type="button" @click="handleReloadClick">
               Check again
             </button>
           </div>
@@ -182,7 +221,7 @@
       </div>
 
       <!-- Toast -->
-      <transition name="fade">
+  <transition name="fade">
         <div v-if="toastMessage" class="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 px-4">
           <div class="flex items-center gap-2 rounded-full border border-white/10 bg-[var(--app-surface-dark-elevated)]/90 px-4 py-2.5 text-xs font-medium text-white shadow-xl backdrop-blur-md">
             <span class="flex h-2 w-2 rounded-full bg-emerald-500"></span>
@@ -192,6 +231,21 @@
       </transition>
     </div>
   </section>
+
+  <ShadowingSentenceJsonImportModal
+    :open="isImportModalOpen"
+    :lesson-id="lesson.id"
+    @close="isImportModalOpen = false"
+    @imported="handleImported"
+  />
+
+  <ShadowingSentenceEditModal
+    :open="isEditModalOpen"
+    :lesson-id="lesson.id"
+    :sentence="activeSentence"
+    @close="isEditModalOpen = false"
+    @saved="handleEdited"
+  />
 </template>
 
 <script setup lang="ts">
@@ -199,7 +253,9 @@ import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { LessonDetail } from '@/types/lesson'
 import { useLessonShadowing } from '@/composables/useLessonShadowing'
-import { fetchLessonSentenceTts, generateLessonShadowingSentences } from '@/api/lessonShadowing'
+import { deleteLessonSentence, fetchLessonSentenceTts, generateLessonShadowingSentences } from '@/api/lessonShadowing'
+import ShadowingSentenceEditModal from '../shadowing/ShadowingSentenceEditModal.vue'
+import ShadowingSentenceJsonImportModal from '../shadowing/ShadowingSentenceJsonImportModal.vue'
 
 const props = defineProps<{ lesson: LessonDetail }>()
 
@@ -326,6 +382,13 @@ const stopPolling = () => {
 }
 
 const isGenerating = ref(false)
+const isImportModalOpen = ref(false)
+const isEditModalOpen = ref(false)
+const isDeleting = ref(false)
+
+const handleReloadClick = () => {
+  reload()
+}
 
 const handleGenerate = async () => {
   if (isGenerating.value) return
@@ -343,6 +406,36 @@ const handleGenerate = async () => {
     pushToast('Could not start shadowing generation')
   } finally {
     isGenerating.value = false
+  }
+}
+
+const handleImported = async (count: number) => {
+  await reload()
+  pushToast(`${count} sentence${count > 1 ? 's' : ''} imported`)
+}
+
+const handleEdited = async () => {
+  await reload(activeSentence.value?.id ?? null)
+  pushToast('Sentence updated')
+}
+
+const handleDelete = async () => {
+  if (!activeSentence.value || isDeleting.value) return
+
+  const confirmed = window.confirm('Delete this sentence?')
+  if (!confirmed) return
+
+  isDeleting.value = true
+  try {
+    const currentId = activeSentence.value.id
+    await deleteLessonSentence(props.lesson.id, currentId)
+    await reload(currentId)
+    pushToast('Sentence deleted')
+  } catch (error) {
+    console.error(error)
+    pushToast('Could not delete sentence')
+  } finally {
+    isDeleting.value = false
   }
 }
 

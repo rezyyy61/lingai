@@ -21,7 +21,11 @@ class GenerateLessonWordsJob implements ShouldQueue
     public int $timeout = 60;
     public int $tries = 1;
 
-    public function __construct(public Lesson $lesson) {}
+    public function __construct(
+        public Lesson $lesson,
+        public ?string $inlinePrompt = null,
+        public bool $replaceExisting = true,
+    ) {}
 
     public function handle(FastLessonWordsService $service): void
     {
@@ -35,11 +39,7 @@ class GenerateLessonWordsJob implements ShouldQueue
         }
 
         try {
-            $words = $service->generate(
-                $lesson->original_text,
-                $lesson->target_language ?? 'en',
-                $lesson->support_language ?? 'en',
-            );
+            $words = $service->generate($lesson, $this->inlinePrompt);
         } catch (Throwable $e) {
             Log::error('GenerateLessonWordsJob: service exception', [
                 'lesson_id' => $lesson->id,
@@ -59,9 +59,16 @@ class GenerateLessonWordsJob implements ShouldQueue
 
         try {
             DB::transaction(function () use ($lesson, $words) {
-                LessonWord::where('lesson_id', $lesson->id)->delete();
+                if ($this->replaceExisting) {
+                    LessonWord::where('lesson_id', $lesson->id)->delete();
+                }
 
                 $created = 0;
+                $existingTerms = LessonWord::query()
+                    ->where('lesson_id', $lesson->id)
+                    ->pluck('term')
+                    ->map(fn (string $term) => mb_strtolower(trim($term)))
+                    ->all();
 
                 foreach ($words as $idx => $word) {
                     if (! is_array($word)) {
@@ -84,6 +91,10 @@ class GenerateLessonWordsJob implements ShouldQueue
                         continue;
                     }
 
+                    if (! $this->replaceExisting && in_array(mb_strtolower($term), $existingTerms, true)) {
+                        continue;
+                    }
+
                     LessonWord::create([
                         'lesson_id' => $lesson->id,
                         'term' => $term,
@@ -93,6 +104,7 @@ class GenerateLessonWordsJob implements ShouldQueue
                     ]);
 
                     $created++;
+                    $existingTerms[] = mb_strtolower($term);
                 }
 
                 if ($created === 0) {

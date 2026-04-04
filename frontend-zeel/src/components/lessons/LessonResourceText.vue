@@ -5,9 +5,6 @@ import { Icon } from '@iconify/vue'
 import LessonReadAloudPlayer from '@/components/lessons/LessonReadAloudPlayer.vue'
 
 const props = defineProps<{ lesson: LessonDetail }>()
-const emit = defineEmits<{
-  (e: 'desktop-read-change', value: boolean): void
-}>()
 
 const isSerif = ref(false)
 const fontSize = ref<'normal' | 'large'>('normal')
@@ -22,6 +19,7 @@ let onMqChange: ((e: MediaQueryListEvent) => void) | null = null
 
 const lessonPack = computed(() => (props.lesson as any)?.lesson_pack ?? null)
 const isTextAi = computed(() => (props.lesson as any)?.resource_type === 'text_ai')
+const canReadAloud = computed(() => String((props.lesson as any)?.original_text ?? '').trim().length > 0)
 
 const dialogueRows = computed(() => {
   const d = lessonPack.value?.dialogue
@@ -48,7 +46,7 @@ const toggleSize = () => {
 }
 
 const toggleRead = () => {
-  if (!isTextAi.value) return
+  if (!canReadAloud.value) return
 
   const next = !showReadAloud.value
   showReadAloud.value = next
@@ -59,8 +57,7 @@ const toggleRead = () => {
       isAudioPlaying.value = false
     }
   } else {
-    isReadExpanded.value = true
-    emit('desktop-read-change', next)
+    isReadExpanded.value = next
   }
 }
 
@@ -74,10 +71,6 @@ const closeReadAloud = () => {
   showReadAloud.value = false
   isReadExpanded.value = false
   isAudioPlaying.value = false
-
-  if (!isMobile.value) {
-    emit('desktop-read-change', false)
-  }
 }
 
 const readBottomInset = computed(() => {
@@ -265,13 +258,12 @@ const onKeyDown = (e: KeyboardEvent) => {
 }
 
 watch(
-  () => (props.lesson as any)?.resource_type,
-  (type) => {
-    if (type !== 'text_ai') {
+  () => canReadAloud.value,
+  (enabled) => {
+    if (!enabled) {
       showReadAloud.value = false
       isReadExpanded.value = false
       isAudioPlaying.value = false
-      emit('desktop-read-change', false)
     }
   },
 )
@@ -312,7 +304,7 @@ onBeforeUnmount(() => {
 
         <div class="flex items-center gap-1">
           <button
-            v-if="isTextAi"
+            v-if="canReadAloud"
             @click="toggleRead"
             class="h-8 px-3 flex items-center gap-2 rounded-lg hover:bg-[var(--app-border)] transition text-[var(--app-text-muted)] hover:text-[var(--app-text)]"
             :title="isMobile ? (showReadAloud ? 'Hide Read Aloud' : 'Show Read Aloud') : 'Open Read Aloud'"
@@ -323,7 +315,7 @@ onBeforeUnmount(() => {
               :class="isAudioPlaying ? 'text-[var(--app-accent)]' : ''"
             />
             <span class="text-xs font-bold">
-              {{ isMobile ? (showReadAloud ? 'Close' : 'Read') : 'Read' }}
+              {{ isMobile ? (showReadAloud ? 'Close' : 'Read Aloud') : 'Read Aloud' }}
             </span>
           </button>
 
@@ -356,7 +348,13 @@ onBeforeUnmount(() => {
       </div>
 
       <transition name="slide-fade">
-        <div v-if="showReadAloud && !isMobile" class="mt-3"></div>
+        <div v-if="showReadAloud && !isMobile" class="mt-3">
+          <LessonReadAloudPlayer
+            :lesson-id="lesson.id"
+            variant="sheet"
+            @playing-change="isAudioPlaying = $event"
+          />
+        </div>
       </transition>
 
     </header>
@@ -433,7 +431,7 @@ onBeforeUnmount(() => {
 
     <transition name="bottom-player">
       <div
-        v-if="showReadAloud && isMobile && isTextAi"
+        v-if="showReadAloud && isMobile && canReadAloud"
         class="fixed inset-x-0 z-[200] px-3 pb-3 pointer-events-none"
         :style="{ bottom: 'var(--read-bottom-inset)' }"
       >

@@ -41,7 +41,16 @@ return [
         'words_timeout' => env('OPENAI_WORDS_TIMEOUT', 25),
         'words_connect_timeout' => env('OPENAI_WORDS_CONNECT_TIMEOUT', 5),
         'words_max_tokens' => env('OPENAI_WORDS_MAX_TOKENS', 650),
+        'words_max_completion_tokens' => env('OPENAI_WORDS_MAX_COMPLETION_TOKENS', 1100),
         'words_max_chars' => env('OPENAI_WORDS_MAX_CHARS', 6000),
+        'words_min_items' => env('OPENAI_WORDS_MIN_ITEMS', 10),
+        'words_max_items' => env('OPENAI_WORDS_MAX_ITEMS', 24),
+        'words_min_per_chunk' => env('OPENAI_WORDS_MIN_PER_CHUNK', 5),
+        'words_max_per_chunk' => env('OPENAI_WORDS_MAX_PER_CHUNK', 10),
+        'words_final_candidate_limit' => env('OPENAI_WORDS_FINAL_CANDIDATE_LIMIT', 36),
+        'words_final_text_max_chars' => env('OPENAI_WORDS_FINAL_TEXT_MAX_CHARS', 9000),
+        'words_final_max_tokens' => env('OPENAI_WORDS_FINAL_MAX_TOKENS', 1200),
+        'words_final_max_completion_tokens' => env('OPENAI_WORDS_FINAL_MAX_COMPLETION_TOKENS', 1400),
 
         // Azure OpenAI
         'azure_endpoint' => env('AZURE_OPENAI_ENDPOINT'),

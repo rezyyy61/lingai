@@ -8,10 +8,12 @@ function mapSentence(dto: LessonSentenceDto): LessonShadowSentence {
     lessonId: dto.lesson_id,
     orderIndex: dto.order_index,
     text: dto.text,
+    ttsAudioUrl: dto.tts_audio_url ?? null,
     translation: dto.translation ?? null,
     source: dto.source,
     startTime: dto.start_time ?? null,
     endTime: dto.end_time ?? null,
+    meta: (dto.meta as Record<string, unknown> | null | undefined) ?? null,
   }
 }
 
@@ -44,13 +46,24 @@ export function useLessonShadowing(lessonId: number) {
   const hasPrev = computed(() => activeIndex.value > 0)
   const hasNext = computed(() => activeIndex.value < total.value - 1)
 
-  async function load() {
+  async function load(preferredSentenceId: number | null = null) {
     isLoading.value = true
     isError.value = false
     try {
       const rows = await fetchLessonSentences(lessonId)
       sentences.value = rows.map(mapSentence)
-      activeIndex.value = 0
+      if (sentences.value.length === 0) {
+        activeIndex.value = 0
+        return
+      }
+
+      if (preferredSentenceId !== null) {
+        const nextIndex = sentences.value.findIndex((sentence) => sentence.id === preferredSentenceId)
+        activeIndex.value = nextIndex >= 0 ? nextIndex : Math.min(activeIndex.value, sentences.value.length - 1)
+        return
+      }
+
+      activeIndex.value = Math.min(activeIndex.value, sentences.value.length - 1)
     } catch {
       isError.value = true
     } finally {
@@ -76,8 +89,8 @@ export function useLessonShadowing(lessonId: number) {
     }
   }
 
-  function reload() {
-    load()
+  function reload(preferredSentenceId: number | null = activeSentence.value?.id ?? null) {
+    return load(preferredSentenceId)
   }
 
   onMounted(load)

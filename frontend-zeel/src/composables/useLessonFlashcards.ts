@@ -6,8 +6,8 @@ function mapLessonWordToFlashcard(dto: LessonWordDto): LessonFlashcard {
   return {
     id: dto.id,
     term: dto.term,
-    meaning: dto.meaning,
-    translation: dto.translation,
+    meaning: dto.meaning ?? '',
+    translation: dto.translation ?? '',
     exampleSentence: dto.example_sentence ?? null,
     phonetic: dto.phonetic ?? null,
     partOfSpeech: dto.part_of_speech ?? null,
@@ -58,13 +58,24 @@ export function useLessonFlashcards(lessonId: number) {
   const hasPrev = computed(() => currentIndex.value > 0)
   const hasNext = computed(() => currentIndex.value < total.value - 1)
 
-  async function load() {
+  async function load(preferredWordId: number | null = null) {
     isLoading.value = true
     isError.value = false
     try {
       const words = await fetchLessonWords(lessonId)
       cards.value = words.map(mapLessonWordToFlashcard)
-      currentIndex.value = 0
+      if (cards.value.length === 0) {
+        currentIndex.value = 0
+        return
+      }
+
+      if (preferredWordId !== null) {
+        const nextIndex = cards.value.findIndex((card) => card.id === preferredWordId)
+        currentIndex.value = nextIndex >= 0 ? nextIndex : Math.min(currentIndex.value, cards.value.length - 1)
+        return
+      }
+
+      currentIndex.value = Math.min(currentIndex.value, cards.value.length - 1)
     } catch {
       isError.value = true
     } finally {
@@ -85,8 +96,8 @@ export function useLessonFlashcards(lessonId: number) {
     }
   }
 
-  function reload() {
-    load()
+  function reload(preferredWordId: number | null = currentCard.value?.id ?? null) {
+    return load(preferredWordId)
   }
 
   onMounted(load)

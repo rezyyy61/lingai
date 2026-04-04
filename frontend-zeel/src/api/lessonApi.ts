@@ -23,6 +23,16 @@ export const generateLessonAnalysis = async (lessonId: number) => {
   await http.post(`/lessons/${lessonId}/analysis/generate`)
 }
 
+export const generateLessonAudioScript = async (lessonId: number) => {
+  const { data } = await http.post<{ status: string; message?: string }>(`/lessons/${lessonId}/audio-script`)
+  return data
+}
+
+export const generateLessonAudio = async (lessonId: number) => {
+  const { data } = await http.post<{ status: string; message?: string }>(`/lessons/${lessonId}/audio`)
+  return data
+}
+
 export const createLesson = async (
   workspaceId: number,
   payload: {
@@ -99,32 +109,18 @@ export const createLessonFromAi = async (
 
 export const getLessonReadAloud = async (
   lessonId: number,
-  params: { speed?: 'slow'|'normal'|'fast'; format?: 'mp3'|'wav' } = {},
 ) => {
-  const { data } = await http.get(`/lessons/${lessonId}/read-aloud`, { params })
+  const { data } = await http.get(`/lessons/${lessonId}/read-aloud`)
   return data
 }
 
 export const generateLessonReadAloud = async (
   lessonId: number,
-  payload: {
-    speed?: 'slow' | 'normal' | 'fast'
-    format?: 'mp3' | 'wav'
-    mode?: 'auto' | 'narration' | 'dialogue' | 'quote'
-    voice_pair?: 'auto' | 'female_male' | 'female_female' | 'male_male'
-  } = {},
 ) => {
   const { data } = await http.post<{
-    parts: { index: number; url: string; chars: number }[]
-    speed: string
-    format: string
-    mode: string
-    voice_pair: string
-    voice: string | null
-    voices?: Record<string, string>
-    locale: string
-    base_url?: string | null
-  }>(`/lessons/${lessonId}/read-aloud`, payload)
+    status: string
+    message?: string
+  }>(`/lessons/${lessonId}/read-aloud`)
 
   return data
 }

@@ -1,88 +1,84 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import LessonHeader from '@/components/lessons/LessonHeader.vue'
 import LessonResourceText from '@/components/lessons/LessonResourceText.vue'
 import LessonTabs from '@/components/lessons/LessonTabs.vue'
-import LessonReadAloudPlayer from '@/components/lessons/LessonReadAloudPlayer.vue'
 import type { LessonDetail } from '@/types/lesson'
 
 const props = defineProps<{ lesson: LessonDetail | null; loading: boolean; error: string }>()
 
-const desktopReadOpen = ref(false)
-const desktopAudioPlaying = ref(false)
+const layoutRef = ref<HTMLElement | null>(null)
+const rightPanelWidth = ref(640)
+const isResizing = ref(false)
 
-const modalOffsetX = ref(0)
-const modalOffsetY = ref(0)
-const dragState = ref<{
-  startX: number
-  startY: number
-  originX: number
-  originY: number
-} | null>(null)
+const RIGHT_PANEL_STORAGE_KEY = 'lingai:lesson-right-panel-width'
+const RIGHT_PANEL_MIN = 420
+const RIGHT_PANEL_MAX = 920
 
-const handleDesktopReadChange = (open: boolean) => {
-  desktopReadOpen.value = open
+const clampRightPanelWidth = (value: number) => {
+  const width = Number.isFinite(value) ? value : RIGHT_PANEL_MIN
+  return Math.max(RIGHT_PANEL_MIN, Math.min(RIGHT_PANEL_MAX, Math.round(width)))
 }
 
-const handleDesktopPlayingChange = (playing: boolean) => {
-  desktopAudioPlaying.value = playing
+const syncWidthToViewport = () => {
+  if (typeof window === 'undefined') return
+  if (window.innerWidth < 1280) return
+
+  const maxFromViewport = Math.min(RIGHT_PANEL_MAX, Math.round(window.innerWidth * 0.48))
+  rightPanelWidth.value = Math.max(RIGHT_PANEL_MIN, Math.min(maxFromViewport, rightPanelWidth.value))
 }
 
-const onModalDragStart = (e: MouseEvent | TouchEvent) => {
-  let point: MouseEvent | Touch | null = null
-  if ('touches' in e) {
-    const t = e.touches[0]
-    if (!t) return
-    point = t
-  } else {
-    point = e
-  }
+const workspaceStyle = computed(() => ({
+  '--lesson-right-panel-width': `${rightPanelWidth.value}px`,
+}))
 
-  dragState.value = {
-    startX: point.clientX,
-    startY: point.clientY,
-    originX: modalOffsetX.value,
-    originY: modalOffsetY.value,
-  }
+const handlePointerMove = (event: PointerEvent) => {
+  if (!isResizing.value || !layoutRef.value) return
 
-  window.addEventListener('mousemove', onModalDragMove)
-  window.addEventListener('mouseup', onModalDragEnd)
-  window.addEventListener('touchmove', onModalDragMove)
-  window.addEventListener('touchend', onModalDragEnd)
+  const rect = layoutRef.value.getBoundingClientRect()
+  const nextWidth = rect.right - event.clientX
+  rightPanelWidth.value = clampRightPanelWidth(nextWidth)
 }
 
-const onModalDragMove = (e: MouseEvent | TouchEvent) => {
-  if (!dragState.value) return
-  let point: MouseEvent | Touch | null = null
-  if ('touches' in e) {
-    const t = e.touches[0]
-    if (!t) return
-    point = t
-  } else {
-    point = e
-  }
-
-  const dx = point.clientX - dragState.value.startX
-  const dy = point.clientY - dragState.value.startY
-  modalOffsetX.value = dragState.value.originX + dx
-  modalOffsetY.value = dragState.value.originY + dy
+const stopResize = () => {
+  if (!isResizing.value) return
+  isResizing.value = false
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
 }
 
-const onModalDragEnd = () => {
-  dragState.value = null
-  window.removeEventListener('mousemove', onModalDragMove)
-  window.removeEventListener('mouseup', onModalDragEnd)
-  window.removeEventListener('touchmove', onModalDragMove)
-  window.removeEventListener('touchend', onModalDragEnd)
+const startResize = (event: PointerEvent) => {
+  if (typeof window !== 'undefined' && window.innerWidth < 1280) return
+
+  isResizing.value = true
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+  event.preventDefault()
 }
 
 onMounted(() => {
-  modalOffsetX.value = 0
-  modalOffsetY.value = 0
+  if (typeof window === 'undefined') return
+
+  const stored = Number(window.localStorage.getItem(RIGHT_PANEL_STORAGE_KEY) || '')
+  if (!Number.isNaN(stored) && stored > 0) {
+    rightPanelWidth.value = clampRightPanelWidth(stored)
+  }
+
+  syncWidthToViewport()
+  window.addEventListener('pointermove', handlePointerMove)
+  window.addEventListener('pointerup', stopResize)
+  window.addEventListener('resize', syncWidthToViewport)
 })
 
 onBeforeUnmount(() => {
-  onModalDragEnd()
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(RIGHT_PANEL_STORAGE_KEY, String(rightPanelWidth.value))
+    window.removeEventListener('pointermove', handlePointerMove)
+    window.removeEventListener('pointerup', stopResize)
+    window.removeEventListener('resize', syncWidthToViewport)
+  }
+
+  stopResize()
 })
 </script>
 
@@ -102,64 +98,41 @@ onBeforeUnmount(() => {
     </div>
   </template>
   <template v-else-if="props.lesson">
-    <section
-      class="relative flex h-[calc(100vh-160px)] flex-col rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-6 text-[var(--app-text)] shadow-[var(--app-card-shadow)] transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/80 dark:text-white dark:shadow-[0_30px_80px_rgba(0,0,0,0.5)]"
+    <div
+      ref="layoutRef"
+      class="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_8px_var(--lesson-right-panel-width)]"
+      :style="workspaceStyle"
     >
-      <LessonHeader :lesson="props.lesson" />
-      <div class="mt-6 flex-1 min-h-0">
-        <LessonResourceText
-          :lesson="props.lesson"
-          class="h-full"
-          @desktop-read-change="handleDesktopReadChange"
-        />
-      </div>
+      <section
+        class="relative flex h-[calc(100vh-160px)] min-w-0 flex-col rounded-[28px] border border-[var(--app-border)] bg-[var(--app-panel)] p-6 text-[var(--app-text)] shadow-[var(--app-card-shadow)] transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/80 dark:text-white dark:shadow-[0_30px_80px_rgba(0,0,0,0.5)]"
+      >
+        <LessonHeader :lesson="props.lesson" />
+        <div class="mt-6 flex-1 min-h-0">
+          <LessonResourceText
+            :lesson="props.lesson"
+            class="h-full"
+          />
+        </div>
+      </section>
 
-      <transition name="desktop-read-modal">
+      <div class="relative hidden xl:flex h-[calc(100vh-160px)] items-center justify-center">
         <div
-          v-if="desktopReadOpen"
-          class="pointer-events-none absolute left-1/2 top-0 z-30 flex w-full justify-center"
-          :style="{ transform: `translate(calc(-50% + ${modalOffsetX}px), ${modalOffsetY}px)` }"
+          class="group flex h-full w-2 cursor-col-resize items-center justify-center"
+          @pointerdown="startResize"
         >
           <div
-            class="pointer-events-auto w-full max-w-2xl rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] shadow-2xl dark:bg-[var(--app-surface-dark-elevated)]/95 overflow-hidden"
-          >
-            <div
-              class="flex items-center justify-between px-3 py-2 border-b border-[var(--app-border)] bg-[var(--app-surface)]/95 cursor-move select-none"
-              @mousedown.prevent="onModalDragStart"
-              @touchstart.stop.prevent="onModalDragStart"
-            >
-              <div
-                class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[var(--app-text-muted)]"
-              >
-                <span>Read Aloud</span>
-              </div>
-
-              <button
-                @click="handleDesktopReadChange(false)"
-                class="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-[var(--app-border)] transition text-[var(--app-text-muted)]"
-                title="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div class="px-3 pb-3 pt-2">
-              <LessonReadAloudPlayer
-                :lesson-id="props.lesson.id"
-                variant="sheet"
-                @playing-change="handleDesktopPlayingChange"
-              />
-            </div>
-          </div>
+            class="h-24 w-[3px] rounded-full bg-[var(--app-border)]/80 transition-all duration-150 group-hover:h-36 group-hover:bg-[var(--app-accent)]"
+            :class="isResizing ? '!h-40 !bg-[var(--app-accent)] shadow-[0_0_0_4px_rgba(249,115,22,0.12)]' : ''"
+          />
         </div>
-      </transition>
-    </section>
+      </div>
 
-    <section
-      class="flex h-[calc(100vh-160px)] flex-col rounded-[28px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-6 text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/90 dark:text-white dark:shadow-[0_35px_95px_rgba(0,0,0,0.6)]"
-    >
-      <LessonTabs :lesson="props.lesson" />
-    </section>
+      <section
+        class="flex h-[calc(100vh-160px)] min-w-0 flex-col rounded-[28px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-6 text-[var(--app-text)] shadow-[var(--app-card-shadow-strong)] transition dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark)]/90 dark:text-white dark:shadow-[0_35px_95px_rgba(0,0,0,0.6)]"
+      >
+        <LessonTabs :lesson="props.lesson" />
+      </section>
+    </div>
   </template>
   <template v-else>
     <div
@@ -169,15 +142,3 @@ onBeforeUnmount(() => {
     </div>
   </template>
 </template>
-
-<style scoped>
-.desktop-read-modal-enter-active,
-.desktop-read-modal-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-.desktop-read-modal-enter-from,
-.desktop-read-modal-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-</style>

@@ -160,7 +160,7 @@ defineEmits<{
 
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: 'flashcards', label: 'Flashcards', icon: 'solar:card-outline' },
-  { key: 'shadowing', label: 'Shadowing', icon: 'solar:microphone-3-outline' },
+  { key: 'shadowing', label: 'Audio', icon: 'solar:microphone-3-outline' },
   { key: 'grammar', label: 'Grammar', icon: 'solar:book-2-outline' },
   { key: 'exercises', label: 'Exercises', icon: 'solar:checklist-minimalistic-outline' },
 ]

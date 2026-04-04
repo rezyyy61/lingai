@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Requests\ImportLessonWordsRequest;
+use App\Http\Requests\StoreLessonWordRequest;
+use App\Http\Requests\UpdateLessonWordRequest;
 use App\Http\Controllers\Controller;
 use App\Jobs\GenerateLessonWordsJob;
 use App\Models\Lesson;
 use App\Models\LessonWord;
-use App\Services\Lessons\LessonWordPromptBuilder;
+use App\Services\Lessons\LessonWordImportService;
 use Illuminate\Http\Request;
 
 class LessonWordController extends Controller
@@ -32,9 +35,9 @@ class LessonWordController extends Controller
         return response()->json($words);
     }
 
-    public function generate(Request $request, Lesson $lesson, LessonWordPromptBuilder $promptBuilder)
+    public function generate(Request $request, Lesson $lesson)
     {
-        if (! $lesson->original_text) {
+        if (trim((string) $lesson->original_text) === '') {
             return response()->json([
                 'message' => 'Lesson has no original_text. Cannot generate words.',
             ], 422);
@@ -73,10 +76,7 @@ class LessonWordController extends Controller
         }
 
         $inlinePrompt = $data['inline_prompt'] ?? null;
-
-        $finalPrompt = $promptBuilder->build($lesson, $inlinePrompt);
-
-        GenerateLessonWordsJob::dispatch($lesson, $finalPrompt, $replaceExisting);
+        GenerateLessonWordsJob::dispatch($lesson, $inlinePrompt, $replaceExisting);
 
         return response()->json([
             'status' => 'queued',
@@ -84,20 +84,25 @@ class LessonWordController extends Controller
         ], 202);
     }
 
-    public function store(Request $request, Lesson $lesson)
+    public function import(ImportLessonWordsRequest $request, Lesson $lesson, LessonWordImportService $importService)
     {
-        $data = $request->validate([
-            'term' => ['required', 'string', 'max:255'],
-            'lemma' => ['nullable', 'string', 'max:255'],
-            'phonetic' => ['nullable', 'string', 'max:255'],
-            'part_of_speech' => ['nullable', 'string', 'max:50'],
-            'meaning' => ['nullable', 'string'],
-            'example_sentence' => ['nullable', 'string'],
-            'translation' => ['nullable', 'string', 'max:255'],
-            'meta' => ['nullable', 'array'],
-        ]);
+        $result = $importService->import(
+            lesson: $lesson,
+            words: $request->validated('words', []),
+            replaceExisting: (bool) $request->validated('replace_existing', true),
+        );
 
-        $word = $lesson->words()->create($data);
+        return response()->json([
+            'status' => 'imported',
+            'created' => $result['created'],
+            'skipped' => $result['skipped'],
+            'words' => $result['words'],
+        ], 201);
+    }
+
+    public function store(StoreLessonWordRequest $request, Lesson $lesson)
+    {
+        $word = $lesson->words()->create($request->validated());
 
         return response()->json($word, 201);
     }
@@ -111,24 +116,13 @@ class LessonWordController extends Controller
         return response()->json($word);
     }
 
-    public function update(Request $request, Lesson $lesson, LessonWord $word)
+    public function update(UpdateLessonWordRequest $request, Lesson $lesson, LessonWord $word)
     {
         if ($word->lesson_id !== $lesson->id) {
             abort(404);
         }
 
-        $data = $request->validate([
-            'term' => ['sometimes', 'string', 'max:255'],
-            'lemma' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'phonetic' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'part_of_speech' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'meaning' => ['sometimes', 'nullable', 'string'],
-            'example_sentence' => ['sometimes', 'nullable', 'string'],
-            'translation' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'meta' => ['sometimes', 'nullable', 'array'],
-        ]);
-
-        $word->update($data);
+        $word->update($request->validated());
 
         return response()->json($word);
     }
