@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\LessonResourceType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -62,6 +63,11 @@ class Lesson extends Model
     public function hasProcessableOriginalText(): bool
     {
         return trim((string) $this->original_text) !== '';
+    }
+
+    public function supportsReadAloud(): bool
+    {
+        return $this->resource_type !== LessonResourceType::Video;
     }
 
     public function spokenAudioSegments(): array

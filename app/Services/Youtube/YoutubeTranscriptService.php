@@ -153,10 +153,23 @@ class YoutubeTranscriptService
         $runDir = rtrim($baseDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $runKey;
         @mkdir($runDir, 0775, true);
 
-        $langs = $language . '.*';
-        if (strtolower($language) !== 'en') {
-            $langs .= ',en.*';
+        $language = trim(mb_strtolower($language));
+        if ($language === '') {
+            $language = 'en';
         }
+
+        $subLangs = [$language];
+
+        if ($language === 'en') {
+            $subLangs[] = 'en-orig';
+        } else {
+            $subLangs[] = $language . '-orig';
+            $subLangs[] = 'en';
+            $subLangs[] = 'en-orig';
+        }
+
+        $subLangs = array_values(array_unique(array_filter($subLangs)));
+        $subLangsArg = implode(',', $subLangs);
 
         $outTemplate = rtrim($runDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '%(id)s.%(ext)s';
 
@@ -164,12 +177,10 @@ class YoutubeTranscriptService
             $bin,
             '--skip-download',
             '--no-playlist',
-            '--write-subs',
             '--write-auto-subs',
-            '--sub-langs', $langs,
+            '--sub-langs', $subLangsArg,
             '--sub-format', 'vtt',
-            '--convert-subs', 'vtt',
-            '-o', $outTemplate,
+            '--output', $outTemplate,
         ];
 
         $jsRuntimes = trim((string) config('services.youtube_transcript.js_runtimes', 'node:/usr/bin/node'));
@@ -177,7 +188,7 @@ class YoutubeTranscriptService
             array_splice($args, 1, 0, ['--js-runtimes', $jsRuntimes]);
         }
 
-        $remoteComponents = trim((string) config('services.youtube_transcript.remote_components', ''));
+        $remoteComponents = trim((string) config('services.youtube_transcript.remote_components', 'ejs:github'));
         if ($remoteComponents !== '') {
             array_splice($args, 1, 0, ['--remote-components', $remoteComponents]);
         }
@@ -186,7 +197,9 @@ class YoutubeTranscriptService
         if ($cookiesFile !== '' && is_file($cookiesFile)) {
             $cookieCopy = rtrim($runDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'youtube-cookies.txt';
             @copy($cookiesFile, $cookieCopy);
+
             if (is_file($cookieCopy)) {
+                @chmod($cookieCopy, 0600);
                 array_splice($args, 1, 0, ['--cookies', $cookieCopy]);
             }
         }
@@ -218,9 +231,11 @@ class YoutubeTranscriptService
 
         if (! is_resource($proc)) {
             $this->cleanupDir($runDir);
+
             Log::warning('YoutubeTranscriptService: yt-dlp failed to start', [
                 'bin' => $bin,
             ]);
+
             return null;
         }
 
@@ -264,11 +279,15 @@ class YoutubeTranscriptService
             Log::warning('YoutubeTranscriptService: yt-dlp no subtitles', [
                 'url' => $url,
                 'language' => $language,
+                'sub_langs' => $subLangsArg,
                 'exit' => $exit,
-                'stderr_head' => mb_substr($stderr, 0, 1200),
-                'stdout_head' => mb_substr($stdout, 0, 600),
+                'stderr_head' => mb_substr($stderr, 0, 2000),
+                'stdout_head' => mb_substr($stdout, 0, 1000),
+                'command' => $cmd,
             ]);
+
             $this->cleanupDir($runDir);
+
             return null;
         }
 
@@ -289,6 +308,7 @@ class YoutubeTranscriptService
                 'language' => $language,
                 'file' => basename($vttPath),
             ]);
+
             return null;
         }
 

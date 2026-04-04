@@ -62,6 +62,33 @@ class GenerateLessonReadAloudTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_it_rejects_youtube_video_lessons_for_read_aloud(): void
+    {
+        Queue::fake();
+
+        [$user, $lesson] = $this->createOwnedLesson([
+            'resource_type' => 'video',
+            'source_url' => 'https://www.youtube.com/watch?v=abc123xyz',
+            'original_text' => 'Transcript text exists but read aloud should stay disabled.',
+            'analysis_meta' => [],
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/lessons/{$lesson->id}/read-aloud");
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['lesson']);
+
+        $this->assertSame(
+            'Read-aloud is not available for YouTube lessons.',
+            data_get($response->json(), 'errors.lesson.0')
+        );
+
+        Queue::assertNothingPushed();
+    }
+
     public function test_it_does_not_dispatch_a_duplicate_job_when_read_aloud_is_processing(): void
     {
         Queue::fake();

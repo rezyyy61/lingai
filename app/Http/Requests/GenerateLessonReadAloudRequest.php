@@ -31,6 +31,11 @@ class GenerateLessonReadAloudRequest extends FormRequest
                     return;
                 }
 
+                if (! $lesson->supportsReadAloud()) {
+                    $validator->errors()->add('lesson', 'Read-aloud is not available for YouTube lessons.');
+                    return;
+                }
+
                 if (! $lesson->hasProcessableOriginalText()) {
                     $validator->errors()->add('lesson', 'Lesson original text is required before generating read-aloud audio.');
                 }

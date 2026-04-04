@@ -19,7 +19,17 @@ let onMqChange: ((e: MediaQueryListEvent) => void) | null = null
 
 const lessonPack = computed(() => (props.lesson as any)?.lesson_pack ?? null)
 const isTextAi = computed(() => (props.lesson as any)?.resource_type === 'text_ai')
-const canReadAloud = computed(() => String((props.lesson as any)?.original_text ?? '').trim().length > 0)
+const isReadAloudSupported = computed(() => {
+  const resourceType = String((props.lesson as any)?.resource_type ?? '').toLowerCase()
+  return resourceType !== 'video' && resourceType !== 'youtube'
+})
+const canReadAloud = computed(() => {
+  if (!isReadAloudSupported.value) {
+    return false
+  }
+
+  return String((props.lesson as any)?.original_text ?? '').trim().length > 0
+})
 
 const dialogueRows = computed(() => {
   const d = lessonPack.value?.dialogue
