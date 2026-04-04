@@ -2,7 +2,7 @@
   <section class="lg:hidden h-full min-h-0">
     <div class="h-full min-h-0 overflow-hidden flex flex-col" style="background: var(--app-bg)">
       <!-- Sticky header + icon tabs -->
-      <div class="sticky top-0 z-30 px-4 pt-4 shrink-0">
+      <div class="sticky top-0 z-30 px-3 pt-2 shrink-0">
         <div
           v-if="!isDetail"
           class="zee-card overflow-hidden relative"
@@ -13,35 +13,32 @@
           />
 
           <!-- Header row -->
-          <div class="relative flex items-center justify-between px-4 pt-4">
+          <div class="relative flex items-center justify-between px-3 pt-3">
             <div class="min-w-0">
-              <div class="text-[11px] font-semibold tracking-wide text-[color:var(--app-text-muted)]">
-                Lesson practice
-              </div>
-              <div class="mt-1 truncate text-lg font-semibold tracking-tight text-[color:var(--app-text)]">
+              <div class="truncate text-base font-semibold tracking-tight text-[color:var(--app-text)]">
                 {{ titleText }}
               </div>
             </div>
 
             <button
-              class="grid h-11 w-11 place-items-center rounded-2xl border border-[color:var(--app-border)]
+              class="grid h-10 w-10 place-items-center rounded-2xl border border-[color:var(--app-border)]
                      bg-[color:var(--app-surface-elevated)] active:scale-[0.99]"
               type="button"
               aria-label="More"
               @click="$emit('more')"
             >
-              <Icon icon="solar:menu-dots-bold" class="h-5 w-5 text-[color:var(--app-text)]" />
+              <Icon icon="solar:menu-dots-bold" class="h-4.5 w-4.5 text-[color:var(--app-text)]" />
             </button>
           </div>
 
           <!-- Icon Tabs -->
-          <div class="relative mt-3 px-4 pb-4">
+          <div class="relative mt-2 px-3 pb-3">
             <div class="grid grid-cols-4 gap-2">
               <button
                 v-for="t in tabs"
                 :key="t.key"
                 type="button"
-                class="group relative flex h-12 items-center justify-center rounded-2xl border transition active:scale-[0.99]"
+                class="group relative flex h-10 items-center justify-center rounded-2xl border transition active:scale-[0.99]"
                 :class="tabBtnClass(t.key)"
                 :aria-label="t.label"
                 @click="selectTab(t.key)"
@@ -53,7 +50,7 @@
                 />
                 <Icon
                   :icon="t.icon"
-                  class="h-6 w-6 transition"
+                  class="h-5 w-5 transition"
                   :class="activeTab === t.key ? 'scale-[1.02]' : 'opacity-80 group-hover:opacity-100'"
                 />
                 <div
@@ -87,7 +84,7 @@
           </div>
         </div>
 
-        <div class="h-3"></div>
+        <div class="h-2"></div>
       </div>
 
       <!-- Content -->
@@ -96,9 +93,6 @@
           v-if="activeTab === 'flashcards'"
           class="h-full min-h-0"
           :lesson-id="lessonId"
-          :initial-words="initialWords"
-          :title="contentTitle"
-          @generate="$emit('generate')"
         />
 
         <LessonTabShadowingMobile
@@ -123,9 +117,6 @@
           v-else
           class="h-full min-h-0"
           :lesson-id="lessonId"
-          :initial-words="initialWords"
-          :title="contentTitle"
-          @generate="$emit('generate')"
         />
       </div>
 
@@ -172,11 +163,6 @@ const lessonId = computed(() => Number(props.lesson?.id || 0))
 const lessonFull = computed(() => props.lesson)
 
 const titleText = computed(() => props.title ?? props.lesson?.title ?? `Lesson #${lessonId.value}`)
-
-const contentTitle = computed(() => {
-  const label = tabs.find((t) => t.key === activeTab.value)?.label ?? 'Practice'
-  return `${titleText.value} • ${label}`
-})
 
 function selectTab(key: TabKey) {
   activeTab.value = key
