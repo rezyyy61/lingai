@@ -11,7 +11,9 @@ import LessonAnalysisPanel from '@/components/lessons/LessonAnalysisPanel.vue'
 import LessonResourceText from '@/components/lessons/LessonResourceText.vue'
 import { Icon } from '@iconify/vue'
 import LessonTabMobile from "@/components/lessons/Mobile/LessonTabMobile.vue";
+import LessonFirstRunState from '@/components/lessons/LessonFirstRunState.vue'
 
+type LessonStartTab = 'text' | 'youtube' | 'ai'
 type LessonFilters = {
   q: string
   level: string
@@ -42,10 +44,15 @@ const query = reactive<LessonFilters>({
 })
 
 const createModalOpen = ref(false)
+const createModalInitialTab = ref<LessonStartTab>('text')
 const loggingOut = ref(false)
 
 const activeMobileTab = ref<'lessons' | 'source' | 'practice'>('lessons')
 const isMenuOpen = ref(false)
+
+const hasActiveFilters = computed(() => {
+  return Boolean(query.q || query.level || query.resource_type)
+})
 
 const workspaceId = computed<number | null>(() => {
   const raw = route.params.id
@@ -159,13 +166,20 @@ const handleLessonClick = (id: number) => {
   fetchLessonDetail(id)
 }
 
-const openCreateModal = () => {
+const openCreateModal = (tab: LessonStartTab = 'text') => {
   if (!workspaceId.value) return
+  createModalInitialTab.value = tab
   createModalOpen.value = true
 }
 
 const closeCreateModal = () => {
   createModalOpen.value = false
+}
+
+const clearLessonFilters = () => {
+  query.q = ''
+  query.level = ''
+  query.resource_type = ''
 }
 
 const handleLessonCreated = async (lessonId: number) => {
@@ -298,25 +312,36 @@ onBeforeUnmount(() => {
       <transition name="fade" mode="out-in">
         <!-- LESSONS tab: this one scrolls -->
         <section v-if="activeMobileTab === 'lessons'" key="lessons" class="h-full overflow-y-auto px-4 py-4">
-          <button
-            @click="openCreateModal"
-            class="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--app-accent)] py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 active:scale-95 transition-transform"
-          >
-            <Icon icon="solar:add-circle-bold" class="h-5 w-5" />
-            New Lesson
-          </button>
+          <template v-if="!lessonsLoading && !lessonsError && lessons.length === 0">
+            <LessonFirstRunState
+              compact
+              :has-lessons="false"
+              :has-active-filters="hasActiveFilters"
+              @create="openCreateModal"
+              @clear-filters="clearLessonFilters"
+            />
+          </template>
+          <template v-else>
+            <button
+              @click="openCreateModal()"
+              class="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--app-accent)] py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 active:scale-95 transition-transform"
+            >
+              <Icon icon="solar:add-circle-bold" class="h-5 w-5" />
+              New Lesson
+            </button>
 
-          <Sidebar
-            :lessons="lessons"
-            :loading="lessonsLoading"
-            :error="lessonsError"
-            :selected-id="selectedLesson?.id ?? null"
-            v-model:q="query.q"
-            v-model:level="query.level"
-            v-model:resource-type="query.resource_type"
-            @select="handleLessonClick"
-            class="!h-auto !shadow-none !bg-transparent !p-0 !border-0"
-          />
+            <Sidebar
+              :lessons="lessons"
+              :loading="lessonsLoading"
+              :error="lessonsError"
+              :selected-id="selectedLesson?.id ?? null"
+              v-model:q="query.q"
+              v-model:level="query.level"
+              v-model:resource-type="query.resource_type"
+              @select="handleLessonClick"
+              class="!h-auto !shadow-none !bg-transparent !p-0 !border-0"
+            />
+          </template>
         </section>
 
         <!-- SOURCE tab: internal scroll only where needed -->
@@ -349,17 +374,14 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <div v-else class="flex flex-1 flex-col items-center justify-center text-center">
-            <div class="mb-4 rounded-full bg-[var(--app-surface-elevated)] p-4 text-[var(--app-border-strong)]">
-              <Icon icon="solar:document-add-bold-duotone" class="h-8 w-8" />
-            </div>
-            <p class="text-[var(--app-text-muted)]">Select a lesson to view its content.</p>
-            <button
-              @click="activeMobileTab = 'lessons'"
-              class="mt-4 text-xs font-semibold text-[var(--app-accent)] uppercase tracking-wider"
-            >
-              Browse Lessons
-            </button>
+          <div v-else class="flex flex-1 min-h-0 flex-col overflow-y-auto">
+            <LessonFirstRunState
+              compact
+              :has-lessons="lessons.length > 0"
+              :has-active-filters="hasActiveFilters"
+              @create="openCreateModal"
+              @clear-filters="clearLessonFilters"
+            />
           </div>
         </section>
 
@@ -376,17 +398,14 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <div v-else class="flex h-full flex-col items-center justify-center text-center px-4">
-            <div class="mb-4 rounded-full bg-[var(--app-surface-elevated)] p-4 text-[var(--app-border-strong)]">
-              <Icon icon="solar:dumbbell-large-minimalistic-bold-duotone" class="h-8 w-8" />
-            </div>
-            <p class="text-[var(--app-text-muted)]">Select a lesson to start practicing.</p>
-            <button
-              @click="activeMobileTab = 'lessons'"
-              class="mt-4 text-xs font-semibold text-[var(--app-accent)] uppercase tracking-wider"
-            >
-              Browse Lessons
-            </button>
+          <div v-else class="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-4">
+            <LessonFirstRunState
+              compact
+              :has-lessons="lessons.length > 0"
+              :has-active-filters="hasActiveFilters"
+              @create="openCreateModal"
+              @clear-filters="clearLessonFilters"
+            />
           </div>
         </section>
       </transition>
@@ -434,6 +453,7 @@ onBeforeUnmount(() => {
       v-if="workspaceId"
       :open="createModalOpen"
       :workspace-id="workspaceId!"
+      :initial-tab="createModalInitialTab"
       @close="closeCreateModal"
       @created="handleLessonCreated"
     />

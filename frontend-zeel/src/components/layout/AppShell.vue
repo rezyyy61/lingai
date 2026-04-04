@@ -10,6 +10,7 @@ import Sidebar from './Sidebar.vue'
 import LessonWorkspace from '@/views/LessonWorkspace.vue'
 import LessonCreateModal from '@/components/lessons/LessonCreateModal.vue'
 
+type LessonStartTab = 'text' | 'youtube' | 'ai'
 type LessonFilters = {
   q: string
   level: string
@@ -38,15 +39,18 @@ const query = reactive<LessonFilters>({
 const sidebarOpen = ref(false)
 const desktopSidebarCollapsed = ref(false)
 const createModalOpen = ref(false)
+const createModalInitialTab = ref<LessonStartTab>('text')
 const loggingOut = ref(false)
-
-const DESKTOP_SIDEBAR_STORAGE_KEY = 'lingai:desktop-sidebar-collapsed'
 
 const desktopGridClass = computed(() =>
   desktopSidebarCollapsed.value
     ? 'xl:grid-cols-[92px_minmax(0,1fr)]'
     : 'xl:grid-cols-[280px_minmax(0,1fr)]',
 )
+
+const hasActiveFilters = computed(() => {
+  return Boolean(query.q || query.level || query.resource_type)
+})
 
 const workspaceId = computed<number | null>(() => {
   const raw = route.params.id
@@ -167,13 +171,20 @@ const toggleDesktopSidebar = () => {
   desktopSidebarCollapsed.value = !desktopSidebarCollapsed.value
 }
 
-const openCreateModal = () => {
+const openCreateModal = (tab: LessonStartTab = 'text') => {
   if (!workspaceId.value) return
+  createModalInitialTab.value = tab
   createModalOpen.value = true
 }
 
 const closeCreateModal = () => {
   createModalOpen.value = false
+}
+
+const clearLessonFilters = () => {
+  query.q = ''
+  query.level = ''
+  query.resource_type = ''
 }
 
 const handleLessonCreated = async (lessonId: number) => {
@@ -198,15 +209,7 @@ const goBackToWorkspaces = () => {
 }
 
 onMounted(() => {
-  if (typeof window !== 'undefined') {
-    desktopSidebarCollapsed.value = window.localStorage.getItem(DESKTOP_SIDEBAR_STORAGE_KEY) === '1'
-  }
   loadLessons()
-})
-
-watch(desktopSidebarCollapsed, (value) => {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(DESKTOP_SIDEBAR_STORAGE_KEY, value ? '1' : '0')
 })
 
 onBeforeUnmount(() => {})
@@ -245,6 +248,10 @@ onBeforeUnmount(() => {})
           :lesson="selectedLesson"
           :loading="detailLoading"
           :error="detailError"
+          :lesson-count="lessons.length"
+          :has-active-filters="hasActiveFilters"
+          @create="openCreateModal"
+          @clear-filters="clearLessonFilters"
         />
       </div>
 
@@ -283,6 +290,7 @@ onBeforeUnmount(() => {})
       v-if="workspaceId"
       :open="createModalOpen"
       :workspace-id="workspaceId!"
+      :initial-tab="createModalInitialTab"
       @close="closeCreateModal"
       @created="handleLessonCreated"
     />

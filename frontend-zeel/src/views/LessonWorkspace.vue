@@ -3,9 +3,21 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import LessonHeader from '@/components/lessons/LessonHeader.vue'
 import LessonResourceText from '@/components/lessons/LessonResourceText.vue'
 import LessonTabs from '@/components/lessons/LessonTabs.vue'
+import LessonFirstRunState from '@/components/lessons/LessonFirstRunState.vue'
 import type { LessonDetail } from '@/types/lesson'
 
-const props = defineProps<{ lesson: LessonDetail | null; loading: boolean; error: string }>()
+const props = defineProps<{
+  lesson: LessonDetail | null
+  loading: boolean
+  error: string
+  lessonCount?: number
+  hasActiveFilters?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'create', tab: 'text' | 'youtube' | 'ai'): void
+  (e: 'clear-filters'): void
+}>()
 
 const layoutRef = ref<HTMLElement | null>(null)
 const rightPanelWidth = ref(640)
@@ -135,10 +147,11 @@ onBeforeUnmount(() => {
     </div>
   </template>
   <template v-else>
-    <div
-      class="rounded-[28px] border border-dashed border-[var(--app-border)] bg-[var(--app-surface-elevated)]/85 px-8 py-12 text-center text-[var(--app-text-muted)] dark:border-[var(--app-border-dark)] dark:bg-[var(--app-surface-dark-elevated)]/85 dark:text-slate-400 xl:col-span-2"
-    >
-      Select a lesson from the list to begin learning.
-    </div>
+    <LessonFirstRunState
+      :has-lessons="(props.lessonCount ?? 0) > 0"
+      :has-active-filters="props.hasActiveFilters ?? false"
+      @create="emit('create', $event)"
+      @clear-filters="emit('clear-filters')"
+    />
   </template>
 </template>

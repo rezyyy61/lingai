@@ -7,6 +7,7 @@ import CreateLessonAiTab from '@/components/lessons/modals/CreateLessonAiTab.vue
 const props = defineProps<{
   open: boolean
   workspaceId: number
+  initialTab?: 'text' | 'youtube' | 'ai'
 }>()
 
 const emit = defineEmits<{
@@ -57,7 +58,7 @@ const resetForms = () => {
   youtubeForm.tags = ''
 
   errorMessage.value = ''
-  activeTab.value = 'text'
+  activeTab.value = props.initialTab ?? 'text'
   resetToken.value++
 }
 
