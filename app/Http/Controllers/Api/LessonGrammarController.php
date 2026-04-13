@@ -8,6 +8,8 @@ use App\Models\Lesson;
 use App\Models\LessonExercise;
 use App\Models\LessonGrammarPoint;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use App\Support\LessonContentGeneration;
 
 class LessonGrammarController extends Controller
 {
@@ -99,10 +101,32 @@ class LessonGrammarController extends Controller
         $prompt = $data['prompt'] ?? null;
         $replace = $data['replace_existing'] ?? true;
 
-        GenerateLessonGrammarJob::dispatch($lesson, $prompt, $replace);
+        return DB::transaction(function () use ($lesson, $prompt, $replace) {
+            /** @var Lesson $lockedLesson */
+            $lockedLesson = Lesson::query()
+                ->whereKey($lesson->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return response()->json([
-            'status' => 'queued',
-        ], 202);
+            if (LessonContentGeneration::currentStatus($lockedLesson, 'grammar') === 'processing') {
+                return response()->json([
+                    'status' => 'processing',
+                    'message' => 'Grammar generation is already in progress.',
+                ], 202);
+            }
+
+            LessonContentGeneration::markProcessing(
+                $lockedLesson->id,
+                'grammar',
+                'Generating grammar notes for this lesson.'
+            );
+
+            GenerateLessonGrammarJob::dispatch($lockedLesson->id, $prompt, $replace)->afterCommit();
+
+            return response()->json([
+                'status' => 'processing',
+                'message' => 'Grammar generation has been queued.',
+            ], 202);
+        });
     }
 }

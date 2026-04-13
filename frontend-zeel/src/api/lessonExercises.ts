@@ -27,9 +27,15 @@ export interface GenerateExercisesPayload {
   replace_existing?: boolean
 }
 
+export interface LessonGenerationResponse {
+  status: 'processing' | 'ready' | 'failed'
+  message?: string
+}
+
 export async function generateLessonExercises(
   lessonId: number,
   payload: GenerateExercisesPayload,
-): Promise<void> {
-  await apiClient.post(`/lessons/${lessonId}/exercises/generate`, payload)
+): Promise<LessonGenerationResponse> {
+  const response = await apiClient.post(`/lessons/${lessonId}/exercises/generate`, payload)
+  return response.data as LessonGenerationResponse
 }

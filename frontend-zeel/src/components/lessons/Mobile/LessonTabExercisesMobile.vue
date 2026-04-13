@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useLessonExercises } from '@/composables/useLessonExercises'
+import { useLessonContentGeneration } from '@/composables/useLessonContentGeneration'
 import type { LessonExerciseOption } from '@/types/lesson'
 import { generateLessonExercises } from '@/api/lessonExercises'
 
@@ -9,11 +10,8 @@ const props = defineProps<{ lessonId: number }>()
 
 const selectedOptionId = ref<number | null>(null)
 
-const isGenerationPending = ref(false)
 const toastMessage = ref('')
-const pendingBaselineSignature = ref<string | null>(null)
 let toastTimeout: number | null = null
-let pollingInterval: number | null = null
 
 const unanswered = ref<Record<number, true>>({})
 
@@ -43,22 +41,13 @@ const rawExercise = computed<any>(() => {
 const promptText = computed(() => {
   const ex: any = rawExercise.value
   return String(
-    ex?.question_prompt ??
-    ex?.questionPrompt ??
-    ex?.question ??
-    ex?.prompt ??
-    ex?.text ??
-    '',
+    ex?.question_prompt ?? ex?.questionPrompt ?? ex?.question ?? ex?.prompt ?? ex?.text ?? '',
   )
 })
 
 const options = computed<LessonExerciseOption[]>(() => {
   const ex: any = rawExercise.value
-  const arr =
-    ex?.options ??
-    ex?.exerciseOptions ??
-    ex?.exercise_options ??
-    []
+  const arr = ex?.options ?? ex?.exerciseOptions ?? ex?.exercise_options ?? []
   return Array.isArray(arr) ? (arr as LessonExerciseOption[]) : []
 })
 
@@ -69,8 +58,6 @@ const progressLabel = computed(() =>
 const progressPercent = computed(() =>
   total.value === 0 ? 0 : Math.round(((activeIndex.value + 1) / Math.max(total.value, 1)) * 100),
 )
-
-const exercisesSignature = computed(() => exercises.value.map((e: any) => e.id).join('-'))
 
 const hasAttempt = computed(() => !!activeAttempt.value)
 
@@ -135,53 +122,42 @@ const pushToast = (message: string) => {
   }, 3500)
 }
 
-const startPolling = () => {
-  if (pollingInterval !== null) return
-  pollingInterval = window.setInterval(() => reload(), 6000)
-}
-
-const stopPolling = () => {
-  if (pollingInterval !== null) {
-    clearInterval(pollingInterval)
-    pollingInterval = null
-  }
-}
-
-watch(isGenerationPending, (pending) => {
-  if (pending) startPolling()
-  else stopPolling()
+const generationTracker = useLessonContentGeneration({
+  lessonId: props.lessonId,
+  feature: 'exercises',
+  reloadContent: async () => {
+    await reload()
+  },
+  onReady: () => {
+    pushToast('Exercises are ready')
+  },
+  onFailed: (state) => {
+    pushToast(String(state?.message ?? 'Exercise generation failed'))
+  },
 })
 
-watch(exercisesSignature, (signature) => {
-  if (!isGenerationPending.value) return
-  if (signature && signature !== pendingBaselineSignature.value) {
-    isGenerationPending.value = false
-    pendingBaselineSignature.value = null
-    stopPolling()
-    pushToast('Exercises are ready')
-  }
+const isGenerationPending = computed(() => generationTracker.isPending.value)
+const generationWaitingLabel = computed(() => {
+  const seconds = generationTracker.waitingSeconds.value
+  if (seconds < 10) return 'a few seconds'
+  return `${seconds}s`
 })
 
 onBeforeUnmount(() => {
   if (toastTimeout) clearTimeout(toastTimeout)
-  stopPolling()
 })
 
 const isGenerating = ref(false)
 
 const handleGenerate = async () => {
   if (isGenerating.value) return
-  pendingBaselineSignature.value = exercisesSignature.value
-  isGenerationPending.value = true
   isGenerating.value = true
-  startPolling()
   try {
-    await generateLessonExercises(props.lessonId, { replace_existing: true })
-    pushToast('Exercise generation queued')
+    const response = await generateLessonExercises(props.lessonId, { replace_existing: true })
+    await generationTracker.beginTracking()
+    pushToast(response.message ?? 'Exercise generation queued')
   } catch (e) {
     console.error(e)
-    isGenerationPending.value = false
-    stopPolling()
     pushToast('Could not start exercise generation')
   } finally {
     isGenerating.value = false
@@ -252,7 +228,10 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
 
 <template>
   <section class="flex h-full flex-col px-4 text-[var(--app-text)]">
-    <div v-if="toastMessage" class="mb-3 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-2 text-center text-xs text-[var(--app-text)] shadow-sm">
+    <div
+      v-if="toastMessage"
+      class="mb-3 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-4 py-2 text-center text-xs text-[var(--app-text)] shadow-sm"
+    >
       {{ toastMessage }}
     </div>
 
@@ -273,9 +252,7 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
       </div>
     </div>
 
-    <div class="mb-2 text-[11px] text-[var(--app-text-muted)]">
-      All skills · All types
-    </div>
+    <div class="mb-2 text-[11px] text-[var(--app-text-muted)]">All skills · All types</div>
 
     <div class="mt-2 flex flex-1 min-h-0 flex-col pb-4 relative">
       <Transition name="fade-scale" mode="out-in">
@@ -285,18 +262,40 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
           key="error"
         >
           <p class="text-xs font-medium">Could not load exercises.</p>
-          <button class="rounded-full border border-current px-3 py-1 text-[10px] font-bold uppercase tracking-wider" @click="reload">
+          <button
+            class="rounded-full border border-current px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
+            @click="reload"
+          >
             Retry
           </button>
         </div>
 
         <div v-else-if="isGenerationPending" class="w-full mt-2" key="generating">
-          <div class="flex flex-col items-center gap-4 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-8 text-center shadow-sm">
+          <div
+            class="flex flex-col items-center gap-4 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-8 text-center shadow-sm"
+          >
             <Icon icon="svg-spinners:90-ring-with-bg" class="h-8 w-8 text-[var(--app-accent)]" />
             <div class="space-y-1">
-              <p class="text-sm font-medium text-[var(--app-text)]">Generating exercises...</p>
-              <p class="text-xs text-[var(--app-text-muted)]">Crafting questions based on lesson content.</p>
+              <p class="text-sm font-medium text-[var(--app-text)]">Generating exercises</p>
+              <p class="text-xs text-[var(--app-text-muted)]">
+                No refresh needed. We’ll load the quiz automatically.
+              </p>
+              <p class="text-[11px] font-medium text-[var(--app-text-muted)]">
+                Waiting {{ generationWaitingLabel }}
+              </p>
             </div>
+            <button
+              type="button"
+              class="zee-card w-full py-3 text-sm font-semibold"
+              @click="
+                () => {
+                  void reload()
+                  void generationTracker.syncStatus()
+                }
+              "
+            >
+              Check now
+            </button>
           </div>
         </div>
 
@@ -315,27 +314,39 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
 
         <div
           v-else-if="emptyStateVisible"
-          class="w-full rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] px-6 py-10 text-center"
+          class="relative w-full overflow-hidden rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)]"
           key="empty"
         >
-          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-panel-muted)] text-[var(--app-accent)]">
-            <Icon icon="solar:dumbbell-large-bold-duotone" class="h-7 w-7" />
-          </div>
-          <p class="text-sm font-medium text-[var(--app-text)]">No exercises yet</p>
-          <p class="mt-1 text-xs text-[var(--app-text-muted)]">
-            Generate targeted practice items to reinforce this lesson.
-          </p>
-          <button
-            class="mt-6 w-full rounded-xl bg-[var(--app-accent)] px-6 py-3 text-sm font-bold text-white shadow-md shadow-[var(--app-accent)]/20 active:scale-95 transition-transform"
-            :disabled="isGenerationPending || isGenerating"
-            @click="handleGenerate"
+          <div
+            class="pointer-events-none absolute left-1/2 top-1/2 h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-3xl"
+            :style="{
+              background: 'radial-gradient(circle, var(--app-accent-soft) 0%, transparent 72%)',
+            }"
+          />
+          <div
+            class="relative flex min-h-[52vh] items-center justify-center px-6 py-10 text-center"
           >
-            Generate exercises
-          </button>
+            <div class="flex flex-col items-center gap-3">
+              <div
+                class="flex h-14 w-14 items-center justify-center rounded-[20px] border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-accent)] shadow-sm"
+              >
+                <Icon icon="solar:dumbbell-large-bold-duotone" class="h-6 w-6" />
+              </div>
+              <button
+                class="zee-btn min-w-[132px] px-4 py-2.5 text-[13px] font-semibold"
+                :disabled="isGenerationPending || isGenerating"
+                @click="handleGenerate"
+              >
+                Generate
+              </button>
+            </div>
+          </div>
         </div>
 
         <div v-else-if="isReady && rawExercise" class="w-full h-full flex flex-col" key="active">
-          <div class="relative flex-1 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] shadow-sm overflow-hidden flex flex-col">
+          <div
+            class="relative flex-1 rounded-[24px] border border-[var(--app-border)] bg-[var(--app-surface-elevated)] shadow-sm overflow-hidden flex flex-col"
+          >
             <div class="px-5 pt-5 pb-2 flex items-center justify-between">
               <div class="flex gap-2">
                 <span
@@ -363,11 +374,26 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
 
                 <div v-if="statusMessage" class="flex items-center gap-1.5">
                   <Icon
-                    :icon="activeAttempt?.isCorrect ? 'solar:check-circle-bold' : 'solar:close-circle-bold'"
+                    :icon="
+                      activeAttempt?.isCorrect
+                        ? 'solar:check-circle-bold'
+                        : 'solar:close-circle-bold'
+                    "
                     class="h-4 w-4"
-                    :class="activeAttempt?.isCorrect ? 'text-[var(--app-accent-secondary)]' : 'text-red-500'"
+                    :class="
+                      activeAttempt?.isCorrect
+                        ? 'text-[var(--app-accent-secondary)]'
+                        : 'text-red-500'
+                    "
                   />
-                  <span class="text-xs font-bold" :class="activeAttempt?.isCorrect ? 'text-[var(--app-accent-secondary)]' : 'text-red-500'">
+                  <span
+                    class="text-xs font-bold"
+                    :class="
+                      activeAttempt?.isCorrect
+                        ? 'text-[var(--app-accent-secondary)]'
+                        : 'text-red-500'
+                    "
+                  >
                     {{ statusMessage }}
                   </span>
                 </div>
@@ -392,17 +418,31 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
                 >
                   <div
                     class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors"
-                    :class="selectedOptionId === option.id ? 'border-current' : 'border-[var(--app-border)] opacity-50 group-hover:opacity-100'"
+                    :class="
+                      selectedOptionId === option.id
+                        ? 'border-current'
+                        : 'border-[var(--app-border)] opacity-50 group-hover:opacity-100'
+                    "
                   >
-                    <div v-if="selectedOptionId === option.id" class="h-2.5 w-2.5 rounded-full bg-current" />
+                    <div
+                      v-if="selectedOptionId === option.id"
+                      class="h-2.5 w-2.5 rounded-full bg-current"
+                    />
                   </div>
                   <span class="text-sm font-medium leading-normal">{{ option.text }}</span>
                 </button>
               </div>
 
-              <div v-if="hasAttempt && explanation" class="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div class="rounded-xl bg-[var(--app-surface)] p-4 border border-[var(--app-border)]">
-                  <p class="mb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--app-text-muted)]">
+              <div
+                v-if="hasAttempt && explanation"
+                class="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-300"
+              >
+                <div
+                  class="rounded-xl bg-[var(--app-surface)] p-4 border border-[var(--app-border)]"
+                >
+                  <p
+                    class="mb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--app-text-muted)]"
+                  >
                     Explanation
                   </p>
                   <p class="text-sm leading-relaxed text-[var(--app-text)]">
@@ -412,7 +452,9 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
               </div>
             </div>
 
-            <div class="mt-auto border-t border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-4 backdrop-blur-xl">
+            <div
+              class="mt-auto border-t border-[var(--app-border)] bg-[var(--app-surface-elevated)] p-4 backdrop-blur-xl"
+            >
               <div class="flex items-center gap-3">
                 <button
                   type="button"
@@ -441,7 +483,11 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
                   @click="handleNext"
                 >
                   {{ hasNext ? 'Next Question' : 'Finish' }}
-                  <Icon v-if="hasNext" icon="solar:arrow-right-linear" class="inline-block ml-1 h-4 w-4" />
+                  <Icon
+                    v-if="hasNext"
+                    icon="solar:arrow-right-linear"
+                    class="inline-block ml-1 h-4 w-4"
+                  />
                 </button>
 
                 <button
@@ -451,14 +497,21 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
                   @click="handleNext"
                   :aria-label="hasAttempt ? 'Next' : 'Skip and next'"
                 >
-                  <Icon :icon="hasAttempt ? 'solar:arrow-right-linear' : 'solar:skip-next-bold'" class="h-5 w-5" />
+                  <Icon
+                    :icon="hasAttempt ? 'solar:arrow-right-linear' : 'solar:skip-next-bold'"
+                    class="h-5 w-5"
+                  />
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        <div v-else class="flex h-full w-full items-center justify-center text-sm text-[var(--app-text-muted)]" key="fallback">
+        <div
+          v-else
+          class="flex h-full w-full items-center justify-center text-sm text-[var(--app-text-muted)]"
+          key="fallback"
+        >
           No active exercise.
         </div>
       </Transition>
@@ -469,7 +522,9 @@ const typeLabel = computed(() => String(rawExercise.value?.type ?? '').trim())
 <style scoped>
 .fade-scale-enter-active,
 .fade-scale-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 .fade-scale-enter-from,
 .fade-scale-leave-to {

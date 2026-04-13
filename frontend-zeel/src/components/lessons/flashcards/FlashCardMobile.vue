@@ -1,343 +1,453 @@
 <template>
   <div class="h-full min-h-0">
     <section class="lg:hidden h-full min-h-0">
-    <div class="h-full min-h-0 overflow-hidden" style="background: var(--app-bg)">
-      <div
-        class="flex h-full min-h-0 flex-col gap-1.5 px-3 pt-2"
-        :style="{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }"
-      >
-        <div class="zee-card shrink-0 p-2.5">
-          <div class="flex items-center justify-between gap-2">
-            <div class="min-w-0 flex flex-1 flex-wrap items-center gap-1.5">
-              <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[10px] font-semibold text-[color:var(--app-text-muted)]">
-                {{ review.dueCount }} due
-              </span>
-              <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300">
-                {{ review.successCount }} good
-              </span>
-              <span class="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-300">
-                {{ review.failureCount }} bad
-              </span>
+      <div class="h-full min-h-0 overflow-hidden" style="background: var(--app-bg)">
+        <div
+          class="flex h-full min-h-0 flex-col gap-1.5 px-3 pt-2"
+          :style="{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }"
+        >
+          <div class="zee-card shrink-0 p-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0 flex flex-1 flex-wrap items-center gap-1.5">
+                <span
+                  class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[10px] font-semibold text-[color:var(--app-text-muted)]"
+                >
+                  {{ review.dueCount }} due
+                </span>
+                <span
+                  class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300"
+                >
+                  {{ review.successCount }} good
+                </span>
+                <span
+                  class="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-300"
+                >
+                  {{ review.failureCount }} bad
+                </span>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="zee-card grid h-9 w-9 place-items-center"
+                  type="button"
+                  :disabled="review.isLoading.value"
+                  aria-label="Restart flashcard review"
+                  @click="handleResetReview"
+                >
+                  <Icon
+                    icon="solar:restart-circle-outline"
+                    class="h-4.5 w-4.5 text-[color:var(--app-text)]"
+                  />
+                </button>
+                <button
+                  class="zee-card grid h-9 w-9 place-items-center"
+                  type="button"
+                  :aria-expanded="showTools ? 'true' : 'false'"
+                  aria-label="More flashcard tools"
+                  @click="showTools = !showTools"
+                >
+                  <Icon
+                    :icon="showTools ? 'solar:close-circle-outline' : 'solar:menu-dots-bold'"
+                    class="h-4.5 w-4.5 text-[color:var(--app-text)]"
+                  />
+                </button>
+              </div>
             </div>
 
-            <div class="flex items-center gap-1.5">
+            <div v-if="showActionBar" class="mt-2 flex gap-2">
               <button
-                class="zee-card grid h-9 w-9 place-items-center"
+                class="zee-btn min-w-0 flex-1 py-2 text-[12px] font-semibold"
                 type="button"
-                :disabled="review.isLoading.value"
-                aria-label="Restart flashcard review"
-                @click="handleResetReview"
+                :disabled="isGenerationPending || isGenerating"
+                @click="handleGenerate"
               >
-                <Icon icon="solar:restart-circle-outline" class="h-4.5 w-4.5 text-[color:var(--app-text)]" />
+                Generate
               </button>
               <button
-                class="zee-card grid h-9 w-9 place-items-center"
+                class="zee-card px-3 py-2 text-[11px] font-semibold"
                 type="button"
-                :aria-expanded="showTools ? 'true' : 'false'"
-                aria-label="More flashcard tools"
-                @click="showTools = !showTools"
+                @click="handleReloadClick"
               >
-                <Icon :icon="showTools ? 'solar:close-circle-outline' : 'solar:menu-dots-bold'" class="h-4.5 w-4.5 text-[color:var(--app-text)]" />
+                Reload
               </button>
             </div>
+
+            <transition name="tools-expand">
+              <div v-if="showTools" class="mt-2 grid grid-cols-3 gap-2">
+                <button
+                  class="zee-card py-2 text-[11px] font-semibold"
+                  type="button"
+                  @click="isImportModalOpen = true"
+                >
+                  Import
+                </button>
+                <button
+                  class="zee-card py-2 text-[11px] font-semibold disabled:opacity-40"
+                  type="button"
+                  :disabled="!activeCard"
+                  @click="isEditModalOpen = true"
+                >
+                  Edit
+                </button>
+                <button
+                  class="zee-card py-2 text-[11px] font-semibold text-red-300 disabled:opacity-40"
+                  type="button"
+                  :disabled="!activeCard || isDeleting"
+                  @click="handleDelete"
+                >
+                  {{ isDeleting ? '…' : 'Delete' }}
+                </button>
+              </div>
+            </transition>
           </div>
 
-          <div v-if="showActionBar" class="mt-2 flex gap-2">
-            <button
-              class="zee-btn min-w-0 flex-1 py-2 text-[12px] font-semibold"
-              type="button"
-              :disabled="isGenerationPending || isGenerating"
-              @click="handleGenerate"
-            >
-              Generate
-            </button>
-            <button
-              class="zee-card px-3 py-2 text-[11px] font-semibold"
-              type="button"
-              @click="handleReloadClick"
-            >
-              Reload
-            </button>
-          </div>
-
-          <transition name="tools-expand">
-            <div v-if="showTools" class="mt-2 grid grid-cols-3 gap-2">
-              <button
-                class="zee-card py-2 text-[11px] font-semibold"
-                type="button"
-                @click="isImportModalOpen = true"
-              >
-                Import
-              </button>
-              <button
-                class="zee-card py-2 text-[11px] font-semibold disabled:opacity-40"
-                type="button"
-                :disabled="!activeCard"
-                @click="isEditModalOpen = true"
-              >
-                Edit
-              </button>
-              <button
-                class="zee-card py-2 text-[11px] font-semibold text-red-300 disabled:opacity-40"
-                type="button"
-                :disabled="!activeCard || isDeleting"
-                @click="handleDelete"
-              >
-                {{ isDeleting ? '…' : 'Delete' }}
+          <div class="flex-1 min-h-0 pt-0.5">
+            <div v-if="isError" class="zee-card h-full overflow-hidden p-5">
+              <div class="text-base font-semibold">Couldn’t load flashcards</div>
+              <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">Try again.</div>
+              <button class="zee-btn mt-4 w-full py-3" type="button" @click="handleReloadClick">
+                Reload
               </button>
             </div>
-          </transition>
-        </div>
 
-        <div class="flex-1 min-h-0 pt-0.5">
-          <div v-if="isError" class="zee-card h-full overflow-hidden p-5">
-            <div class="text-base font-semibold">Couldn’t load flashcards</div>
-            <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">Try again.</div>
-            <button class="zee-btn mt-4 w-full py-3" type="button" @click="handleReloadClick">
-              Reload
-            </button>
-          </div>
-
-          <div v-else-if="isLoading" class="zee-card h-full overflow-hidden p-5">
-            <div class="animate-pulse space-y-3">
-              <div class="h-5 w-28 rounded bg-[color:var(--app-panel-muted)]"></div>
-              <div class="h-10 w-3/4 rounded bg-[color:var(--app-panel-muted)]"></div>
-              <div class="h-4 w-1/2 rounded bg-[color:var(--app-panel-muted)]"></div>
-              <div class="h-4 w-2/3 rounded bg-[color:var(--app-panel-muted)]"></div>
-            </div>
-          </div>
-
-          <div v-else-if="emptyStateVisible" class="zee-card h-full overflow-hidden p-5">
-            <div class="text-base font-semibold">No flashcards yet</div>
-            <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
-              Generate words for this lesson to start practicing.
-            </div>
-            <button
-              class="zee-btn mt-4 w-full py-3"
-              type="button"
-              :disabled="isGenerationPending || isGenerating"
-              @click="handleGenerate"
-            >
-              Generate flashcards
-            </button>
-            <button
-              class="zee-card mt-3 w-full py-3 text-sm font-semibold"
-              type="button"
-              @click="isImportModalOpen = true"
-            >
-              Import JSON
-            </button>
-          </div>
-
-          <div v-else-if="isGenerationPending" class="zee-card h-full overflow-hidden p-5">
-            <div class="text-base font-semibold">Generating…</div>
-            <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
-              We’re extracting vocabulary. This usually takes a few seconds.
+            <div v-else-if="isLoading" class="zee-card h-full overflow-hidden p-5">
+              <div class="animate-pulse space-y-3">
+                <div class="h-5 w-28 rounded bg-[color:var(--app-panel-muted)]"></div>
+                <div class="h-10 w-3/4 rounded bg-[color:var(--app-panel-muted)]"></div>
+                <div class="h-4 w-1/2 rounded bg-[color:var(--app-panel-muted)]"></div>
+                <div class="h-4 w-2/3 rounded bg-[color:var(--app-panel-muted)]"></div>
+              </div>
             </div>
 
-            <div class="mt-5">
-              <div class="h-2 w-full overflow-hidden rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel-muted)]">
+            <div v-else-if="emptyStateVisible" class="zee-card relative h-full overflow-hidden">
+              <div
+                class="pointer-events-none absolute left-1/2 top-1/2 h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-3xl"
+                :style="{
+                  background: 'radial-gradient(circle, var(--app-accent-soft) 0%, transparent 72%)',
+                }"
+              />
+              <div class="relative flex h-full items-center justify-center p-5">
+                <div class="flex flex-col items-center gap-3">
+                  <div
+                    class="flex h-14 w-14 items-center justify-center rounded-[20px] border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] text-[color:var(--app-accent)] shadow-[var(--app-card-shadow)]"
+                  >
+                    <Icon icon="solar:card-2-bold-duotone" class="h-6 w-6" />
+                  </div>
+
+                  <div class="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      class="zee-btn min-w-[120px] px-4 py-2.5 text-[13px] font-semibold"
+                      type="button"
+                      :disabled="isGenerationPending || isGenerating"
+                      @click="handleGenerate"
+                    >
+                      Generate
+                    </button>
+                    <button
+                      class="zee-card px-4 py-2.5 text-[13px] font-semibold"
+                      type="button"
+                      @click="isImportModalOpen = true"
+                    >
+                      Import
+                    </button>
+                  </div>
+
+                  <button
+                    class="text-[11px] font-medium text-[color:var(--app-text-muted)]"
+                    type="button"
+                    @click="showTools = true"
+                  >
+                    More actions
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="isGenerationPending" class="zee-card h-full overflow-hidden p-5">
+              <div class="flex h-full flex-col justify-center text-center">
                 <div
-                  class="h-full rounded-full"
-                  :style="{ width: '55%', background: 'linear-gradient(90deg, var(--app-accent), var(--app-accent-strong))' }"
-                />
+                  class="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] text-[color:var(--app-accent)]"
+                >
+                  <Icon icon="svg-spinners:90-ring-with-bg" class="h-7 w-7" />
+                </div>
+                <div class="mt-4 text-base font-semibold">Generating flashcards</div>
+                <div class="mt-1 text-sm leading-relaxed text-[color:var(--app-text-muted)]">
+                  No refresh needed. We’ll update this screen automatically when the deck is ready.
+                </div>
+                <div class="mt-3 text-[11px] font-medium text-[color:var(--app-text-muted)]">
+                  Waiting {{ generationWaitingLabel }}
+                </div>
+
+                <div class="mt-5">
+                  <div
+                    class="h-2 w-full overflow-hidden rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel-muted)]"
+                  >
+                    <div
+                      class="h-full rounded-full"
+                      :style="{
+                        width: '55%',
+                        background:
+                          'linear-gradient(90deg, var(--app-accent), var(--app-accent-strong))',
+                      }"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  class="zee-card mt-5 w-full py-3 text-sm font-semibold"
+                  type="button"
+                  @click="manualReload"
+                >
+                  Check now
+                </button>
               </div>
             </div>
 
-            <button class="zee-btn mt-5 w-full py-3" type="button" @click="manualReload">
-              Check again
-            </button>
-          </div>
-
-          <div
-            v-else-if="displayCard"
-            class="zee-card relative h-full overflow-hidden"
-            :style="cardStyle"
-            @pointerdown="onPointerDown"
-            @pointermove="onPointerMove"
-            @pointerup="onPointerUp"
-            @pointercancel="onPointerUp"
-            @touchstart.passive="onTouchStart"
-            @touchmove.passive="onTouchMove"
-            @touchend.passive="onTouchEnd"
-            @touchcancel.passive="onTouchEnd"
-            role="button"
-            tabindex="0"
-            @click="flip"
-            @keydown.enter.prevent="flip"
-            @keydown.space.prevent="flip"
-          >
             <div
-              class="pointer-events-none absolute -inset-10 opacity-60 blur-3xl"
-              :style="{ background: 'radial-gradient(60% 60% at 50% 10%, var(--app-accent-soft) 0%, transparent 70%)' }"
-            />
+              v-else-if="displayCard"
+              class="zee-card relative h-full overflow-hidden"
+              :style="cardStyle"
+              @pointerdown="onPointerDown"
+              @pointermove="onPointerMove"
+              @pointerup="onPointerUp"
+              @pointercancel="onPointerUp"
+              @touchstart.passive="onTouchStart"
+              @touchmove.passive="onTouchMove"
+              @touchend.passive="onTouchEnd"
+              @touchcancel.passive="onTouchEnd"
+              role="button"
+              tabindex="0"
+              @click="flip"
+              @keydown.enter.prevent="flip"
+              @keydown.space.prevent="flip"
+            >
+              <div
+                class="pointer-events-none absolute -inset-10 opacity-60 blur-3xl"
+                :style="{
+                  background:
+                    'radial-gradient(60% 60% at 50% 10%, var(--app-accent-soft) 0%, transparent 70%)',
+                }"
+              />
 
-            <div class="relative h-full w-full flip-perspective">
-              <div class="h-full w-full flip-inner" :class="isFlipped ? 'is-flipped' : ''">
-                <div class="face p-4">
-                  <div class="flex h-full min-h-0 flex-col">
-                    <div class="flex items-start justify-between">
-                      <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[10px] font-semibold text-[color:var(--app-text-muted)]">
-                        Prompt
-                      </span>
+              <div class="relative h-full w-full flip-perspective">
+                <div class="h-full w-full flip-inner" :class="isFlipped ? 'is-flipped' : ''">
+                  <div class="face p-4">
+                    <div class="flex h-full min-h-0 flex-col">
+                      <div class="flex items-start justify-between">
+                        <span
+                          class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[10px] font-semibold text-[color:var(--app-text-muted)]"
+                        >
+                          Prompt
+                        </span>
 
-                      <button
-                        class="grid h-9 w-9 place-items-center rounded-2xl border border-[color:var(--app-border)]
-                               bg-[color:var(--app-surface-elevated)] active:scale-[0.99]"
-                        type="button"
-                        aria-label="Play audio"
-                        @click="playAudio($event)"
+                        <button
+                          class="grid h-9 w-9 place-items-center rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] active:scale-[0.99]"
+                          type="button"
+                          aria-label="Play audio"
+                          @click="playAudio($event)"
+                        >
+                          <Icon
+                            v-if="isPlaying"
+                            icon="solar:pause-circle-outline"
+                            class="h-6 w-6"
+                            :style="{ color: 'var(--app-accent)' }"
+                          />
+                          <Icon
+                            v-else
+                            icon="solar:play-circle-outline"
+                            class="h-6 w-6"
+                            :style="{ color: 'var(--app-accent)' }"
+                          />
+                        </button>
+                      </div>
+
+                      <div
+                        class="flex flex-1 min-h-0 flex-col items-center justify-center text-center px-1"
                       >
-                        <Icon v-if="isPlaying" icon="solar:pause-circle-outline" class="h-6 w-6" :style="{ color: 'var(--app-accent)' }" />
-                        <Icon v-else icon="solar:play-circle-outline" class="h-6 w-6" :style="{ color: 'var(--app-accent)' }" />
-                      </button>
-                    </div>
-
-                    <div class="flex flex-1 min-h-0 flex-col items-center justify-center text-center px-1">
-                      <div class="text-[clamp(1.9rem,7vw,2.55rem)] font-semibold leading-[1.04] tracking-tight">
-                        {{ displayCard.term }}
+                        <div
+                          class="text-[clamp(1.9rem,7vw,2.55rem)] font-semibold leading-[1.04] tracking-tight"
+                        >
+                          {{ displayCard.term }}
+                        </div>
+                        <div
+                          class="mt-2 max-w-[16rem] text-[10px] font-medium leading-relaxed text-[color:var(--app-text-muted)]"
+                        >
+                          Tap to flip. Swipe when ready.
+                        </div>
                       </div>
-                      <div class="mt-2 max-w-[16rem] text-[10px] font-medium leading-relaxed text-[color:var(--app-text-muted)]">
-                        Tap to flip. Swipe when ready.
-                      </div>
-                    </div>
 
-                    <div class="flex items-center justify-between text-[11px] text-[color:var(--app-text-muted)]">
-                      <span v-if="isLoadingAudio">Loading audio…</span>
-                      <span v-else-if="cardHasTts">Audio ready</span>
-                      <span v-else>Play available</span>
-                      <span class="font-semibold">
-                        {{ `${review.reviewedCount.value + 1}/${Math.max(review.sessionInitialCount.value, 1)}` }}
-                      </span>
+                      <div
+                        class="flex items-center justify-between text-[11px] text-[color:var(--app-text-muted)]"
+                      >
+                        <span v-if="isLoadingAudio">Loading audio…</span>
+                        <span v-else-if="cardHasTts">Audio ready</span>
+                        <span v-else>Play available</span>
+                        <span class="font-semibold">
+                          {{
+                            `${review.reviewedCount.value + 1}/${Math.max(review.sessionInitialCount.value, 1)}`
+                          }}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div class="face back p-4">
-                  <div class="flex h-full min-h-0 flex-col">
-                    <div class="flex items-start justify-between">
-                      <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[10px] font-semibold text-[color:var(--app-text-muted)]">
-                        Answer
-                      </span>
+                  <div class="face back p-4">
+                    <div class="flex h-full min-h-0 flex-col">
+                      <div class="flex items-start justify-between">
+                        <span
+                          class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-2 py-1 text-[10px] font-semibold text-[color:var(--app-text-muted)]"
+                        >
+                          Answer
+                        </span>
 
-                      <button
-                        class="grid h-9 w-9 place-items-center rounded-2xl border border-[color:var(--app-border)]
-                               bg-[color:var(--app-surface-elevated)] active:scale-[0.99]"
-                        type="button"
-                        aria-label="Play audio"
-                        @click="playAudio($event)"
+                        <button
+                          class="grid h-9 w-9 place-items-center rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] active:scale-[0.99]"
+                          type="button"
+                          aria-label="Play audio"
+                          @click="playAudio($event)"
+                        >
+                          <Icon
+                            v-if="isPlaying"
+                            icon="solar:pause-circle-outline"
+                            class="h-6 w-6"
+                            :style="{ color: 'var(--app-accent)' }"
+                          />
+                          <Icon
+                            v-else
+                            icon="solar:play-circle-outline"
+                            class="h-6 w-6"
+                            :style="{ color: 'var(--app-accent)' }"
+                          />
+                        </button>
+                      </div>
+
+                      <div class="mt-4 flex-1 min-h-0 overflow-hidden">
+                        <div
+                          class="rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] p-4"
+                        >
+                          <div
+                            class="text-[10px] font-semibold tracking-[0.18em] uppercase text-[color:var(--app-text-muted)]"
+                          >
+                            Translation
+                          </div>
+                          <div class="mt-1 text-xl font-semibold leading-tight" dir="auto">
+                            {{ displayCard.translation || '—' }}
+                          </div>
+                        </div>
+
+                        <div class="mt-3 space-y-3 overflow-hidden">
+                          <div class="overflow-hidden">
+                            <div
+                              class="text-[10px] font-semibold tracking-[0.18em] uppercase text-[color:var(--app-text-muted)]"
+                            >
+                              Meaning
+                            </div>
+                            <div class="mt-1 text-sm leading-relaxed clamp-3">
+                              {{ displayCard.meaning || '—' }}
+                            </div>
+                          </div>
+
+                          <div class="overflow-hidden">
+                            <div
+                              class="text-[10px] font-semibold tracking-[0.18em] uppercase text-[color:var(--app-text-muted)]"
+                            >
+                              Example
+                            </div>
+                            <div class="mt-1 text-sm leading-relaxed clamp-3">
+                              {{ cardExample || '—' }}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        class="mt-3 flex items-center justify-between text-[11px] text-[color:var(--app-text-muted)]"
                       >
-                        <Icon v-if="isPlaying" icon="solar:pause-circle-outline" class="h-6 w-6" :style="{ color: 'var(--app-accent)' }" />
-                        <Icon v-else icon="solar:play-circle-outline" class="h-6 w-6" :style="{ color: 'var(--app-accent)' }" />
-                      </button>
-                    </div>
-
-                    <div class="mt-4 flex-1 min-h-0 overflow-hidden">
-                      <div class="rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] p-4">
-                        <div class="text-[10px] font-semibold tracking-[0.18em] uppercase text-[color:var(--app-text-muted)]">Translation</div>
-                        <div class="mt-1 text-xl font-semibold leading-tight" dir="auto">
-                          {{ displayCard.translation || '—' }}
-                        </div>
+                        <span>Left = bad • Right = good</span>
+                        <span class="font-semibold">{{
+                          displayCard.id ? `#${displayCard.id}` : ''
+                        }}</span>
                       </div>
-
-                      <div class="mt-3 space-y-3 overflow-hidden">
-                        <div class="overflow-hidden">
-                          <div class="text-[10px] font-semibold tracking-[0.18em] uppercase text-[color:var(--app-text-muted)]">Meaning</div>
-                          <div class="mt-1 text-sm leading-relaxed clamp-3">
-                            {{ displayCard.meaning || '—' }}
-                          </div>
-                        </div>
-
-                        <div class="overflow-hidden">
-                          <div class="text-[10px] font-semibold tracking-[0.18em] uppercase text-[color:var(--app-text-muted)]">Example</div>
-                          <div class="mt-1 text-sm leading-relaxed clamp-3">
-                            {{ cardExample || '—' }}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="mt-3 flex items-center justify-between text-[11px] text-[color:var(--app-text-muted)]">
-                      <span>Left = bad • Right = good</span>
-                      <span class="font-semibold">{{ displayCard.id ? `#${displayCard.id}` : '' }}</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+
+            <div v-else-if="total" class="zee-card h-full overflow-hidden p-5">
+              <div class="text-base font-semibold">Review complete</div>
+              <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
+                All wrong cards have now been cleared. Restart all if you want to see the whole deck
+                again.
+              </div>
+              <div class="mt-4 flex items-center gap-2 text-xs text-[color:var(--app-text-muted)]">
+                <span>{{ review.successCount }} good</span>
+                <span>•</span>
+                <span>{{ review.failureCount }} bad</span>
+              </div>
+              <button class="zee-btn mt-5 w-full py-3" type="button" @click="handleResetReview">
+                Review all again
+              </button>
+            </div>
+
+            <div v-else class="zee-card h-full overflow-hidden p-5">
+              <div class="text-base font-semibold">Nothing to show</div>
+              <button
+                class="zee-btn mt-4 w-full py-3"
+                type="button"
+                :disabled="isGenerationPending || isGenerating"
+                @click="handleGenerate"
+              >
+                Generate flashcards
+              </button>
+            </div>
           </div>
 
-          <div v-else-if="total" class="zee-card h-full overflow-hidden p-5">
-            <div class="text-base font-semibold">Review complete</div>
-            <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
-              All wrong cards have now been cleared. Restart all if you want to see the whole deck again.
-            </div>
-            <div class="mt-4 flex items-center gap-2 text-xs text-[color:var(--app-text-muted)]">
-              <span>{{ review.successCount }} good</span>
-              <span>•</span>
-              <span>{{ review.failureCount }} bad</span>
-            </div>
-            <button class="zee-btn mt-5 w-full py-3" type="button" @click="handleResetReview">
-              Review all again
-            </button>
-          </div>
+          <div v-if="showReviewFooter" class="shrink-0 pt-1">
+            <div class="grid grid-cols-[52px_minmax(0,1fr)_52px] items-center gap-2.5">
+              <button
+                class="zee-card mx-auto flex h-11 w-11 items-center justify-center rounded-full text-red-300 active:scale-[0.99] disabled:opacity-40"
+                type="button"
+                :disabled="review.isSubmitting.value || !displayCard"
+                @click="handleReviewSubmit('dont_know')"
+                aria-label="Don't know"
+              >
+                <Icon icon="solar:close-circle-bold-duotone" class="h-5.5 w-5.5" />
+              </button>
 
-          <div v-else class="zee-card h-full overflow-hidden p-5">
-            <div class="text-base font-semibold">Nothing to show</div>
-            <button
-              class="zee-btn mt-4 w-full py-3"
-              type="button"
-              :disabled="isGenerationPending || isGenerating"
-              @click="handleGenerate"
+              <button
+                class="zee-btn min-h-[46px] px-4 py-2.5 text-sm font-semibold"
+                type="button"
+                :disabled="!displayCard"
+                @click="flip"
+              >
+                {{ isFlipped ? 'Answer shown' : 'Show answer' }}
+              </button>
+
+              <button
+                class="zee-card mx-auto flex h-11 w-11 items-center justify-center rounded-full text-emerald-400 active:scale-[0.99] disabled:opacity-40"
+                type="button"
+                :disabled="review.isSubmitting.value || !displayCard"
+                @click="handleReviewSubmit('know')"
+                aria-label="Know"
+              >
+                <Icon icon="solar:check-circle-bold-duotone" class="h-5.5 w-5.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <transition name="fade">
+          <div v-if="toastMessage" class="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 px-4">
+            <div
+              class="flex items-center gap-2 rounded-full border border-white/10 bg-[var(--app-surface-dark-elevated)]/90 px-4 py-2.5 text-xs font-medium text-white shadow-xl backdrop-blur-md"
             >
-              Generate flashcards
-            </button>
+              <span class="flex h-2 w-2 rounded-full bg-emerald-500"></span>
+              {{ toastMessage }}
+            </div>
           </div>
-        </div>
-
-        <div class="shrink-0 pt-1">
-          <div class="grid grid-cols-[52px_minmax(0,1fr)_52px] items-center gap-2.5">
-          <button
-            class="zee-card mx-auto flex h-11 w-11 items-center justify-center rounded-full text-red-300 active:scale-[0.99] disabled:opacity-40"
-            type="button"
-            :disabled="review.isSubmitting.value || !displayCard"
-            @click="handleReviewSubmit('dont_know')"
-            aria-label="Don't know"
-          >
-            <Icon icon="solar:close-circle-bold-duotone" class="h-5.5 w-5.5" />
-          </button>
-
-          <button
-            class="zee-btn min-h-[46px] px-4 py-2.5 text-sm font-semibold"
-            type="button"
-            :disabled="!displayCard"
-            @click="flip"
-          >
-            {{ isFlipped ? 'Answer shown' : 'Show answer' }}
-          </button>
-
-          <button
-            class="zee-card mx-auto flex h-11 w-11 items-center justify-center rounded-full text-emerald-400 active:scale-[0.99] disabled:opacity-40"
-            type="button"
-            :disabled="review.isSubmitting.value || !displayCard"
-            @click="handleReviewSubmit('know')"
-            aria-label="Know"
-          >
-            <Icon icon="solar:check-circle-bold-duotone" class="h-5.5 w-5.5" />
-          </button>
-          </div>
-        </div>
+        </transition>
       </div>
-
-      <transition name="fade">
-        <div v-if="toastMessage" class="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 px-4">
-          <div class="flex items-center gap-2 rounded-full border border-white/10 bg-[var(--app-surface-dark-elevated)]/90 px-4 py-2.5 text-xs font-medium text-white shadow-xl backdrop-blur-md">
-            <span class="flex h-2 w-2 rounded-full bg-emerald-500"></span>
-            {{ toastMessage }}
-          </div>
-        </div>
-      </transition>
-    </div>
     </section>
 
     <FlashcardJsonImportModal
@@ -362,28 +472,25 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useFlashcardReview } from '@/composables/useFlashcardReview'
 import { useLessonFlashcards } from '@/composables/useLessonFlashcards'
-import { deleteLessonWord, fetchLessonWordTts, generateLessonFlashcards } from '@/api/lessonFlashcards'
+import {
+  deleteLessonWord,
+  fetchLessonWordTts,
+  generateLessonFlashcards,
+} from '@/api/lessonFlashcards'
+import { useLessonContentGeneration } from '@/composables/useLessonContentGeneration'
 import FlashcardEditModal from './FlashcardEditModal.vue'
 import FlashcardJsonImportModal from './FlashcardJsonImportModal.vue'
 
 const props = defineProps<{ lessonId: number }>()
 
-const {
-  currentCard,
-  total,
-  isLoading,
-  isError,
-  isEmpty,
-  isReady,
-  reload,
-} = useLessonFlashcards(props.lessonId)
+const { currentCard, total, isLoading, isError, isEmpty, isReady, reload } = useLessonFlashcards(
+  props.lessonId,
+)
 
 const review = useFlashcardReview(props.lessonId)
 const displayCard = computed(() => review.currentCard.value)
 const activeCard = computed(() => review.currentCard.value ?? currentCard.value)
 
-const isGenerationPending = ref(false)
-const isGenerationTimedOut = ref(false)
 const isGenerating = ref(false)
 const isImportModalOpen = ref(false)
 const isEditModalOpen = ref(false)
@@ -391,32 +498,8 @@ const isDeleting = ref(false)
 const showTools = ref(false)
 const isFlipped = ref(false)
 const didSwipe = ref(false)
-
 const toastMessage = ref('')
 let toastTimeout: number | null = null
-let pollingInterval: number | null = null
-let generationTimeout: number | null = null
-
-const generationStorageKey = computed(() => `zeel:flashcards-generating:${props.lessonId}`)
-
-const loadGenerationState = () => {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(generationStorageKey.value) === '1'
-  } catch {
-    return false
-  }
-}
-
-const persistGenerationState = (pending: boolean) => {
-  if (typeof window === 'undefined') return
-  try {
-    if (pending) window.localStorage.setItem(generationStorageKey.value, '1')
-    else window.localStorage.removeItem(generationStorageKey.value)
-  } catch {
-    // ignore
-  }
-}
 
 const pushToast = (message: string) => {
   toastMessage.value = message
@@ -427,43 +510,32 @@ const pushToast = (message: string) => {
   }, 3000)
 }
 
-const stopPolling = () => {
-  if (pollingInterval !== null) {
-    clearInterval(pollingInterval)
-    pollingInterval = null
-  }
-  if (generationTimeout !== null) {
-    clearTimeout(generationTimeout)
-    generationTimeout = null
-  }
-}
+const generationTracker = useLessonContentGeneration({
+  lessonId: props.lessonId,
+  feature: 'flashcards',
+  reloadContent: async () => {
+    await reload()
+  },
+  onReady: async () => {
+    await review.start()
+    pushToast('Vocabulary is ready')
+  },
+  onFailed: (state) => {
+    pushToast(String(state?.message ?? 'Flashcard generation failed'))
+  },
+})
 
-const handleTimeout = () => {
-  stopPolling()
-  isGenerationPending.value = false
-  isGenerationTimedOut.value = true
-  persistGenerationState(false)
-}
+const isGenerationPending = computed(() => generationTracker.isPending.value)
+const isGenerationTimedOut = computed(() => generationTracker.hasTimedOut.value)
+const generationWaitingLabel = computed(() => {
+  const seconds = generationTracker.waitingSeconds.value
+  if (seconds < 10) return 'a few seconds'
+  return `${seconds}s`
+})
 
-const startPolling = () => {
-  if (pollingInterval !== null) return
-
-  isGenerationTimedOut.value = false
-
-  if (generationTimeout === null) {
-    generationTimeout = window.setTimeout(handleTimeout, 40000)
-  }
-
-  pollingInterval = window.setInterval(() => {
-    reload()
-  }, 4000)
-}
-
-const manualReload = () => {
-  isGenerationTimedOut.value = false
-  isGenerationPending.value = true
-  startPolling()
-  reload()
+const manualReload = async () => {
+  await reload()
+  await generationTracker.syncStatus()
 }
 
 const handleReloadClick = () => {
@@ -472,19 +544,13 @@ const handleReloadClick = () => {
 
 const handleGenerate = async () => {
   if (isGenerating.value) return
-  isGenerationTimedOut.value = false
-  isGenerationPending.value = true
   isGenerating.value = true
-  persistGenerationState(true)
-  startPolling()
   try {
-    await generateLessonFlashcards(props.lessonId, { replace_existing: true })
-    pushToast('Vocabulary extraction started')
+    const response = await generateLessonFlashcards(props.lessonId, { replace_existing: true })
+    await generationTracker.beginTracking()
+    pushToast(response.message ?? 'Vocabulary extraction started')
   } catch (error) {
     console.error(error)
-    isGenerationPending.value = false
-    persistGenerationState(false)
-    stopPolling()
     pushToast('Could not start vocabulary extraction')
   } finally {
     isGenerating.value = false
@@ -546,25 +612,6 @@ const handleDelete = async () => {
   }
 }
 
-watch(isReady, (ready) => {
-  if (ready) {
-    if (isGenerationPending.value) {
-      pushToast('Vocabulary is ready')
-      review.start()
-    }
-    isGenerationPending.value = false
-    isGenerationTimedOut.value = false
-    persistGenerationState(false)
-    stopPolling()
-  }
-})
-
-watch(isGenerationPending, (pending) => {
-  if (pending) startPolling()
-  else stopPolling()
-  persistGenerationState(pending)
-})
-
 watch(
   () => displayCard.value?.id,
   () => {
@@ -576,17 +623,11 @@ watch(
 )
 
 onMounted(() => {
-  const pending = loadGenerationState()
-  if (pending) {
-    isGenerationPending.value = true
-    startPolling()
-  }
   review.start()
 })
 
 onBeforeUnmount(() => {
   if (toastTimeout) clearTimeout(toastTimeout)
-  stopPolling()
   stopAudio()
 })
 
@@ -723,13 +764,18 @@ async function playAudio(event?: Event) {
 }
 
 const emptyStateVisible = computed(() => isEmpty.value && !isGenerationPending.value)
+const showReviewFooter = computed(() => !!displayCard.value)
 const showActionBar = computed(() => {
-  return showTools.value || emptyStateVisible.value || isGenerationPending.value || !displayCard.value
+  return (
+    showTools.value || isGenerationPending.value || (!displayCard.value && !emptyStateVisible.value)
+  )
 })
 </script>
 
 <style scoped>
-.flip-perspective { perspective: 1200px; }
+.flip-perspective {
+  perspective: 1200px;
+}
 .flip-inner {
   position: relative;
   height: 100%;
@@ -737,7 +783,9 @@ const showActionBar = computed(() => {
   transform-style: preserve-3d;
   transition: transform 500ms ease;
 }
-.flip-inner.is-flipped { transform: rotateY(180deg); }
+.flip-inner.is-flipped {
+  transform: rotateY(180deg);
+}
 
 .face {
   position: absolute;
@@ -746,7 +794,9 @@ const showActionBar = computed(() => {
   -webkit-backface-visibility: hidden;
   transform: translateZ(0.1px);
 }
-.face.back { transform: rotateY(180deg) translateZ(0.1px); }
+.face.back {
+  transform: rotateY(180deg) translateZ(0.1px);
+}
 
 .clamp-3 {
   display: -webkit-box;
@@ -756,13 +806,26 @@ const showActionBar = computed(() => {
 }
 
 .fade-enter-active,
-.fade-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.fade-enter-from { opacity: 0; transform: translateY(8px); }
-.fade-leave-to { opacity: 0; transform: translateY(-8px); }
+.fade-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
 
 .tools-expand-enter-active,
 .tools-expand-leave-active {
-  transition: max-height 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    max-height 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
   overflow: hidden;
 }
 

@@ -27,7 +27,7 @@ const formatMeta = (lesson: Lesson) => {
 
 <template>
   <article
-    class="rounded-2xl border transition"
+    class="rounded-2xl border transition p-4"
     :class="[
       props.selected
         ? 'border-[var(--app-accent)] bg-[var(--app-panel)] text-[var(--app-text)] shadow-[var(--app-card-shadow)] dark:bg-[var(--app-surface-dark)] dark:text-white dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]'
@@ -39,7 +39,7 @@ const formatMeta = (lesson: Lesson) => {
     <button
       type="button"
       class="w-full text-left"
-      :class="props.collapsed ? 'flex min-h-[52px] items-center justify-center px-1.5 py-2' : 'px-4 py-3'"
+      :class="props.collapsed ? 'flex min-h-[42px] items-center justify-center px-1.5 py-2' : 'px-4 py-3'"
       @click="emit('select', props.lesson.id)"
     >
       <template v-if="props.collapsed">

@@ -4,11 +4,13 @@ namespace App\Jobs;
 
 use App\Models\Lesson;
 use App\Models\LessonGrammarPoint;
+use App\Support\LessonContentGeneration;
 use App\Services\Lessons\LessonGrammarService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -18,30 +20,33 @@ class GenerateLessonGrammarJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public Lesson $lesson;
-
-    public ?string $customPrompt;
-
-    public bool $replaceExisting;
-
     public int $timeout = 60;
 
     public $tries = 1;
 
     public $backoff = 30;
 
-    public function __construct(Lesson $lesson, ?string $customPrompt = null, bool $replaceExisting = true)
+    public function __construct(
+        public int $lessonId,
+        public ?string $customPrompt = null,
+        public bool $replaceExisting = true
+    )
     {
-        $this->lesson = $lesson;
-        $this->customPrompt = $customPrompt;
-        $this->replaceExisting = $replaceExisting;
+    }
+
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping("lesson-grammar:{$this->lessonId}"))->dontRelease(),
+        ];
     }
 
     public function handle(LessonGrammarService $grammarService): void
     {
-        $lesson = $this->lesson->fresh();
+        $lesson = Lesson::query()->find($this->lessonId);
 
         if (! $lesson || ! $lesson->original_text || trim((string) $lesson->original_text) === '') {
+            LessonContentGeneration::markFailed($this->lessonId, 'grammar', 'Lesson text is missing.');
             return;
         }
 
@@ -54,12 +59,14 @@ class GenerateLessonGrammarJob implements ShouldQueue
                 'message' => $e->getMessage(),
             ]);
             report($e);
+            LessonContentGeneration::markFailed($lesson->id, 'grammar', 'Could not generate grammar notes.');
             return;
         }
 
         $grammarPoints = $result['grammar_points'] ?? [];
 
         if (! is_array($grammarPoints) || empty($grammarPoints)) {
+            LessonContentGeneration::markFailed($lesson->id, 'grammar', 'No grammar notes were generated.');
             return;
         }
 
@@ -106,6 +113,18 @@ class GenerateLessonGrammarJob implements ShouldQueue
                     ]);
                 }
             });
+
+            $itemCount = LessonGrammarPoint::query()->where('lesson_id', $lesson->id)->count();
+
+            if ($itemCount === 0) {
+                LessonContentGeneration::markFailed($lesson->id, 'grammar', 'No grammar notes were saved.');
+                return;
+            }
+
+            LessonContentGeneration::markReady($lesson->id, 'grammar', [
+                'message' => 'Grammar notes are ready.',
+                'item_count' => $itemCount,
+            ]);
         } catch (Throwable $e) {
             Log::error('GenerateLessonGrammarJob: db failure', [
                 'lesson_id' => $lesson->id ?? null,
@@ -113,15 +132,18 @@ class GenerateLessonGrammarJob implements ShouldQueue
                 'message' => $e->getMessage(),
             ]);
             report($e);
+            LessonContentGeneration::markFailed($lesson->id, 'grammar', 'Could not save generated grammar notes.');
         }
     }
 
     public function failed(Throwable $e): void
     {
         Log::error('GenerateLessonGrammarJob: failed', [
-            'lesson_id' => $this->lesson->id ?? null,
+            'lesson_id' => $this->lessonId,
             'exception' => get_class($e),
             'message' => $e->getMessage(),
         ]);
+
+        LessonContentGeneration::markFailed($this->lessonId, 'grammar', 'Grammar generation failed.');
     }
 }

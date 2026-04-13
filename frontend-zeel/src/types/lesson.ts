@@ -2,7 +2,6 @@ export type LessonResourceType = 'text' | 'text_ai' | 'video' | 'audio' | 'youtu
 export type LessonStatus = 'draft' | 'processing' | 'ready' | 'failed' | 'generating'
 export type LessonLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | null
 
-
 export interface Lesson {
   id: number
   title: string
@@ -128,7 +127,6 @@ export interface LessonSentenceInput {
   meta?: Record<string, unknown> | null
 }
 
-
 export interface LessonExerciseOptionDto {
   id: number
   lesson_exercise_id: number
@@ -173,15 +171,23 @@ export interface LessonExerciseAttemptResponse {
 }
 
 export interface LessonAnalysisMeta {
+  content_generation?: {
+    flashcards?: LessonContentGenerationState | null
+    shadowing?: LessonContentGenerationState | null
+    grammar?: LessonContentGenerationState | null
+    exercises?: LessonContentGenerationState | null
+  } | null
   language_direction?: 'rtl' | 'ltr' | null
   audio_script?: {
-    spoken_segments?: {
-      type: string
-      speaker: string
-      style: string
-      pause_ms: number
-      text: string
-    }[] | null
+    spoken_segments?:
+      | {
+          type: string
+          speaker: string
+          style: string
+          pause_ms: number
+          text: string
+        }[]
+      | null
     spoken_script?: string | null
     source_language_code?: string | null
     [key: string]: unknown
@@ -194,6 +200,17 @@ export interface LessonAnalysisMeta {
     generated_at?: string | null
     [key: string]: unknown
   } | null
+  [key: string]: unknown
+}
+
+export interface LessonContentGenerationState {
+  status?: 'processing' | 'ready' | 'failed' | null
+  message?: string | null
+  started_at?: string | null
+  updated_at?: string | null
+  completed_at?: string | null
+  failed_at?: string | null
+  item_count?: number | null
   [key: string]: unknown
 }
 

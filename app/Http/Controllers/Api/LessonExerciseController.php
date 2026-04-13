@@ -8,6 +8,8 @@ use App\Models\Lesson;
 use App\Models\LessonExercise;
 use App\Models\LessonExerciseAttempt;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use App\Support\LessonContentGeneration;
 
 class LessonExerciseController extends Controller
 {
@@ -124,12 +126,33 @@ class LessonExerciseController extends Controller
         $customPrompt = $data['custom_prompt'] ?? null;
         $replaceExisting = $data['replace_existing'] ?? true;
 
-        GenerateLessonExercisesJob::dispatch($lesson, $customPrompt, $replaceExisting);
+        return DB::transaction(function () use ($lesson, $customPrompt, $replaceExisting) {
+            /** @var Lesson $lockedLesson */
+            $lockedLesson = Lesson::query()
+                ->whereKey($lesson->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return response()->json([
-            'status' => 'queued',
-            'message' => 'Exercise generation job has been queued for this lesson.',
-        ], 202);
+            if (LessonContentGeneration::currentStatus($lockedLesson, 'exercises') === 'processing') {
+                return response()->json([
+                    'status' => 'processing',
+                    'message' => 'Exercise generation is already in progress.',
+                ], 202);
+            }
+
+            LessonContentGeneration::markProcessing(
+                $lockedLesson->id,
+                'exercises',
+                'Generating practice questions for this lesson.'
+            );
+
+            GenerateLessonExercisesJob::dispatch($lockedLesson->id, $customPrompt, $replaceExisting)->afterCommit();
+
+            return response()->json([
+                'status' => 'processing',
+                'message' => 'Exercise generation has been queued.',
+            ], 202);
+        });
     }
 
 }

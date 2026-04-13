@@ -1,5 +1,10 @@
 import apiClient from '@/services/http'
-import type { FlashcardReviewQueueResponse, LessonWordDto, LessonWordInput, LessonWordReviewDto } from '@/types/lesson'
+import type {
+  FlashcardReviewQueueResponse,
+  LessonWordDto,
+  LessonWordInput,
+  LessonWordReviewDto,
+} from '@/types/lesson'
 
 export async function fetchLessonWords(lessonId: number): Promise<LessonWordDto[]> {
   const response = await apiClient.get(`/lessons/${lessonId}/words`)
@@ -23,11 +28,17 @@ export interface GenerateFlashcardsPayload {
   replace_existing?: boolean
 }
 
+export interface LessonGenerationResponse {
+  status: 'processing' | 'ready' | 'failed'
+  message?: string
+}
+
 export async function generateLessonFlashcards(
   lessonId: number,
   payload: GenerateFlashcardsPayload,
-): Promise<void> {
-  await apiClient.post(`/lessons/${lessonId}/words/generate`, payload)
+): Promise<LessonGenerationResponse> {
+  const response = await apiClient.post(`/lessons/${lessonId}/words/generate`, payload)
+  return response.data as LessonGenerationResponse
 }
 
 export interface ImportLessonWordsPayload {
@@ -60,10 +71,7 @@ export async function updateLessonWord(
   return response.data as LessonWordDto
 }
 
-export async function deleteLessonWord(
-  lessonId: number,
-  wordId: number,
-): Promise<void> {
+export async function deleteLessonWord(lessonId: number, wordId: number): Promise<void> {
   await apiClient.delete(`/lessons/${lessonId}/words/${wordId}`)
 }
 

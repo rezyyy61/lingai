@@ -11,6 +11,8 @@ use App\Models\Lesson;
 use App\Models\LessonSentence;
 use App\Services\Lessons\LessonSentenceImportService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use App\Support\LessonContentGeneration;
 
 class LessonSentenceController extends Controller
 {
@@ -76,12 +78,33 @@ class LessonSentenceController extends Controller
         $customPrompt = $data['custom_prompt'] ?? null;
         $replaceExisting = $data['replace_existing'] ?? true;
 
-        GenerateLessonSentencesJob::dispatch($lesson, $customPrompt, $replaceExisting);
+        return DB::transaction(function () use ($lesson, $customPrompt, $replaceExisting) {
+            /** @var Lesson $lockedLesson */
+            $lockedLesson = Lesson::query()
+                ->whereKey($lesson->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return response()->json([
-            'status' => 'queued',
-            'message' => 'Sentence generation job has been queued for this lesson.',
-        ], 202);
+            if (LessonContentGeneration::currentStatus($lockedLesson, 'shadowing') === 'processing') {
+                return response()->json([
+                    'status' => 'processing',
+                    'message' => 'Sentence generation is already in progress.',
+                ], 202);
+            }
+
+            LessonContentGeneration::markProcessing(
+                $lockedLesson->id,
+                'shadowing',
+                'Generating shadowing sentences for this lesson.'
+            );
+
+            GenerateLessonSentencesJob::dispatch($lockedLesson->id, $customPrompt, $replaceExisting)->afterCommit();
+
+            return response()->json([
+                'status' => 'processing',
+                'message' => 'Sentence generation has been queued.',
+            ], 202);
+        });
     }
 
     public function show(Lesson $lesson, LessonSentence $sentence)

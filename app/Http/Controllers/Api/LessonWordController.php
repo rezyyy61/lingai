@@ -10,6 +10,8 @@ use App\Jobs\GenerateLessonWordsJob;
 use App\Models\Lesson;
 use App\Models\LessonWord;
 use App\Services\Lessons\LessonWordImportService;
+use App\Support\LessonContentGeneration;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
 class LessonWordController extends Controller
@@ -76,12 +78,34 @@ class LessonWordController extends Controller
         }
 
         $inlinePrompt = $data['inline_prompt'] ?? null;
-        GenerateLessonWordsJob::dispatch($lesson, $inlinePrompt, $replaceExisting);
 
-        return response()->json([
-            'status' => 'queued',
-            'message' => 'Word generation job has been queued for this lesson.',
-        ], 202);
+        return DB::transaction(function () use ($lesson, $inlinePrompt, $replaceExisting) {
+            /** @var Lesson $lockedLesson */
+            $lockedLesson = Lesson::query()
+                ->whereKey($lesson->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (LessonContentGeneration::currentStatus($lockedLesson, 'flashcards') === 'processing') {
+                return response()->json([
+                    'status' => 'processing',
+                    'message' => 'Flashcard generation is already in progress.',
+                ], 202);
+            }
+
+            LessonContentGeneration::markProcessing(
+                $lockedLesson->id,
+                'flashcards',
+                'Generating flashcards for this lesson.'
+            );
+
+            GenerateLessonWordsJob::dispatch($lockedLesson->id, $inlinePrompt, $replaceExisting)->afterCommit();
+
+            return response()->json([
+                'status' => 'processing',
+                'message' => 'Flashcard generation has been queued.',
+            ], 202);
+        });
     }
 
     public function import(ImportLessonWordsRequest $request, Lesson $lesson, LessonWordImportService $importService)

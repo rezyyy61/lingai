@@ -3,7 +3,7 @@ import type { LessonSentenceDto, LessonSentenceInput } from '@/types/lesson'
 
 export async function fetchLessonSentences(
   lessonId: number,
-  params?: { q?: string; source?: 'original' | 'generated' }
+  params?: { q?: string; source?: 'original' | 'generated' },
 ): Promise<LessonSentenceDto[]> {
   const response = await apiClient.get(`/lessons/${lessonId}/sentences`, {
     params,
@@ -37,10 +37,7 @@ export async function updateLessonSentence(
   return response.data as LessonSentenceDto
 }
 
-export async function deleteLessonSentence(
-  lessonId: number,
-  sentenceId: number,
-): Promise<void> {
+export async function deleteLessonSentence(lessonId: number, sentenceId: number): Promise<void> {
   await apiClient.delete(`/lessons/${lessonId}/sentences/${sentenceId}`)
 }
 
@@ -49,9 +46,15 @@ export interface GenerateShadowingPayload {
   replace_existing?: boolean
 }
 
+export interface LessonGenerationResponse {
+  status: 'processing' | 'ready' | 'failed'
+  message?: string
+}
+
 export async function generateLessonShadowingSentences(
   lessonId: number,
   payload: GenerateShadowingPayload,
-): Promise<void> {
-  await apiClient.post(`/lessons/${lessonId}/sentences/generate`, payload)
+): Promise<LessonGenerationResponse> {
+  const response = await apiClient.post(`/lessons/${lessonId}/sentences/generate`, payload)
+  return response.data as LessonGenerationResponse
 }

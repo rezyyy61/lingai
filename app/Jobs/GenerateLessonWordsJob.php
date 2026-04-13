@@ -4,11 +4,13 @@ namespace App\Jobs;
 
 use App\Models\Lesson;
 use App\Models\LessonWord;
+use App\Support\LessonContentGeneration;
 use App\Services\Lessons\FastLessonWordsService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -22,19 +24,27 @@ class GenerateLessonWordsJob implements ShouldQueue
     public int $tries = 1;
 
     public function __construct(
-        public Lesson $lesson,
+        public int $lessonId,
         public ?string $inlinePrompt = null,
         public bool $replaceExisting = true,
     ) {}
 
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping("lesson-flashcards:{$this->lessonId}"))->dontRelease(),
+        ];
+    }
+
     public function handle(FastLessonWordsService $service): void
     {
-        $lesson = $this->lesson->fresh();
+        $lesson = Lesson::query()->find($this->lessonId);
 
         if (! $lesson || ! $lesson->original_text || trim((string) $lesson->original_text) === '') {
             Log::warning('GenerateLessonWordsJob: missing lesson or text', [
-                'lesson_id' => $this->lesson->id ?? null,
+                'lesson_id' => $this->lessonId,
             ]);
+            LessonContentGeneration::markFailed($this->lessonId, 'flashcards', 'Lesson text is missing.');
             return;
         }
 
@@ -47,6 +57,7 @@ class GenerateLessonWordsJob implements ShouldQueue
                 'message' => $e->getMessage(),
             ]);
             report($e);
+            LessonContentGeneration::markFailed($lesson->id, 'flashcards', 'Could not generate flashcards.');
             return;
         }
 
@@ -54,16 +65,18 @@ class GenerateLessonWordsJob implements ShouldQueue
             Log::warning('GenerateLessonWordsJob: empty words', [
                 'lesson_id' => $lesson->id,
             ]);
+            LessonContentGeneration::markFailed($lesson->id, 'flashcards', 'No flashcards were generated.');
             return;
         }
 
         try {
-            DB::transaction(function () use ($lesson, $words) {
+            $created = 0;
+
+            DB::transaction(function () use ($lesson, $words, &$created) {
                 if ($this->replaceExisting) {
                     LessonWord::where('lesson_id', $lesson->id)->delete();
                 }
 
-                $created = 0;
                 $existingTerms = LessonWord::query()
                     ->where('lesson_id', $lesson->id)
                     ->pluck('term')
@@ -113,6 +126,18 @@ class GenerateLessonWordsJob implements ShouldQueue
                     ]);
                 }
             });
+
+            $itemCount = LessonWord::query()->where('lesson_id', $lesson->id)->count();
+
+            if ($itemCount === 0) {
+                LessonContentGeneration::markFailed($lesson->id, 'flashcards', 'No flashcards were saved.');
+                return;
+            }
+
+            LessonContentGeneration::markReady($lesson->id, 'flashcards', [
+                'message' => 'Flashcards are ready.',
+                'item_count' => $itemCount,
+            ]);
         } catch (Throwable $e) {
             Log::error('GenerateLessonWordsJob: db failure', [
                 'lesson_id' => $lesson->id,
@@ -120,7 +145,19 @@ class GenerateLessonWordsJob implements ShouldQueue
                 'message' => $e->getMessage(),
             ]);
             report($e);
+            LessonContentGeneration::markFailed($lesson->id, 'flashcards', 'Could not save generated flashcards.');
             return;
         }
+    }
+
+    public function failed(Throwable $e): void
+    {
+        Log::error('GenerateLessonWordsJob: failed', [
+            'lesson_id' => $this->lessonId,
+            'exception' => get_class($e),
+            'message' => $e->getMessage(),
+        ]);
+
+        LessonContentGeneration::markFailed($this->lessonId, 'flashcards', 'Flashcard generation failed.');
     }
 }

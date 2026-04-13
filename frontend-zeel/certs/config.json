@@ -5,11 +5,12 @@
       "127.0.0.1",
       "192.168.1.237",
       "172.21.0.1",
+      "172.22.0.1",
       "192.168.1.193"
     ],
     "hash": {
-      "key": "8a94a56deb36ea84b421d32d3c88d365b5714cf5ab20adc12581a0da7184141f",
-      "cert": "af23a1473488615769306e3fe6b4e62bf1f090273d5efcd3f57e1b09baa3e922"
+      "key": "b4fad4cf1f8a90c7160941086446fc20f376f88272418b77ec753af94bfdd30a",
+      "cert": "2f3a3381dc73b79dbd8c5f99f6668a26e085e5ad6913dd3afe3f5030385dd4f9"
     }
   },
   "configFilePath": "/home/rezy/PhpstormProjects/lingai/frontend-zeel/certs/config.json"

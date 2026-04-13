@@ -5,8 +5,10 @@
         class="flex h-full min-h-0 flex-col gap-3 px-4 pt-4"
         :style="{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }"
       >
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-3 py-1 text-[11px] font-semibold text-[color:var(--app-text-muted)]">
+        <div v-if="!emptyStateVisible" class="flex flex-wrap items-center justify-between gap-2">
+          <span
+            class="rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel)] px-3 py-1 text-[11px] font-semibold text-[color:var(--app-text-muted)]"
+          >
             {{ progressLabel }}
           </span>
           <div class="flex flex-wrap items-center gap-2">
@@ -66,40 +68,81 @@
           </div>
 
           <!-- Empty -->
-          <div v-else-if="emptyStateVisible" class="zee-card h-full overflow-hidden p-5">
-            <div class="text-base font-semibold">No shadowing sentences yet</div>
-            <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
-              Generate sentences for shadowing practice.
+          <div v-else-if="emptyStateVisible" class="zee-card relative h-full overflow-hidden">
+            <div
+              class="pointer-events-none absolute left-1/2 top-1/2 h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-3xl"
+              :style="{
+                background: 'radial-gradient(circle, var(--app-accent-soft) 0%, transparent 72%)',
+              }"
+            />
+            <div class="relative flex h-full items-center justify-center p-5">
+              <div class="flex flex-col items-center gap-3">
+                <div
+                  class="flex h-14 w-14 items-center justify-center rounded-[20px] border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] text-[color:var(--app-accent)] shadow-[var(--app-card-shadow)]"
+                >
+                  <Icon icon="solar:microphone-3-bold-duotone" class="h-6 w-6" />
+                </div>
+
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    class="zee-btn min-w-[120px] px-4 py-2.5 text-[13px] font-semibold"
+                    type="button"
+                    :disabled="isGenerationPending || isGenerating"
+                    @click="handleGenerate"
+                  >
+                    Generate
+                  </button>
+                  <button
+                    class="zee-card px-4 py-2.5 text-[13px] font-semibold"
+                    type="button"
+                    @click="isImportModalOpen = true"
+                  >
+                    Import
+                  </button>
+                </div>
+              </div>
             </div>
-            <button
-              class="zee-btn mt-4 w-full py-3"
-              type="button"
-              :disabled="isGenerationPending || isGenerating"
-              @click="handleGenerate"
-            >
-              Generate shadowing
-            </button>
           </div>
 
           <!-- Pending -->
           <div v-else-if="isGenerationPending" class="zee-card h-full overflow-hidden p-5">
-            <div class="text-base font-semibold">Generating…</div>
-            <div class="mt-1 text-sm text-[color:var(--app-text-muted)]">
-              We’re preparing shadowing sentences. This may take a few seconds.
-            </div>
-
-            <div class="mt-5">
-              <div class="h-2 w-full overflow-hidden rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel-muted)]">
-                <div
-                  class="h-full rounded-full"
-                  :style="{ width: '55%', background: 'linear-gradient(90deg, var(--app-accent), var(--app-accent-strong))' }"
-                />
+            <div class="flex h-full flex-col justify-center text-center">
+              <div
+                class="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] text-[color:var(--app-accent)]"
+              >
+                <Icon icon="svg-spinners:90-ring-with-bg" class="h-7 w-7" />
               </div>
-            </div>
+              <div class="mt-4 text-base font-semibold">Generating audio sentences</div>
+              <div class="mt-1 text-sm leading-relaxed text-[color:var(--app-text-muted)]">
+                No refresh needed. We’ll show the sentences here as soon as they’re ready.
+              </div>
+              <div class="mt-3 text-[11px] font-medium text-[color:var(--app-text-muted)]">
+                Waiting {{ generationWaitingLabel }}
+              </div>
 
-            <button class="zee-btn mt-5 w-full py-3" type="button" @click="handleReloadClick">
-              Check again
-            </button>
+              <div class="mt-5">
+                <div
+                  class="h-2 w-full overflow-hidden rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-panel-muted)]"
+                >
+                  <div
+                    class="h-full rounded-full"
+                    :style="{
+                      width: '55%',
+                      background:
+                        'linear-gradient(90deg, var(--app-accent), var(--app-accent-strong))',
+                    }"
+                  />
+                </div>
+              </div>
+
+              <button
+                class="zee-card mt-5 w-full py-3 text-sm font-semibold"
+                type="button"
+                @click="handleReloadClick"
+              >
+                Check now
+              </button>
+            </div>
           </div>
 
           <!-- Ready -->
@@ -115,7 +158,10 @@
             <!-- subtle glow -->
             <div
               class="pointer-events-none absolute -inset-10 opacity-60 blur-3xl"
-              :style="{ background: 'radial-gradient(60% 60% at 50% 10%, var(--app-accent-soft) 0%, transparent 70%)' }"
+              :style="{
+                background:
+                  'radial-gradient(60% 60% at 50% 10%, var(--app-accent-soft) 0%, transparent 70%)',
+              }"
             />
 
             <div class="relative h-full min-h-0 p-5 flex flex-col">
@@ -137,12 +183,14 @@
 
                 <button
                   type="button"
-                  class="rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)]
-                         px-3 py-2 text-xs font-semibold text-[color:var(--app-text)] active:scale-[0.99]"
+                  class="rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] px-3 py-2 text-xs font-semibold text-[color:var(--app-text)] active:scale-[0.99]"
                   @click="showTranslation = !showTranslation"
                 >
                   <div class="flex items-center gap-2">
-                    <Icon :icon="showTranslation ? 'solar:eye-closed-outline' : 'solar:eye-outline'" class="h-4 w-4" />
+                    <Icon
+                      :icon="showTranslation ? 'solar:eye-closed-outline' : 'solar:eye-outline'"
+                      class="h-4 w-4"
+                    />
                     <span>{{ showTranslation ? 'Hide' : 'Show' }}</span>
                   </div>
                 </button>
@@ -150,7 +198,9 @@
 
               <!-- Sentence -->
               <div class="mt-5 flex-1 min-h-0 flex flex-col justify-center text-center">
-                <div class="text-[18px] font-semibold leading-relaxed tracking-tight text-[color:var(--app-text)]">
+                <div
+                  class="text-[18px] font-semibold leading-relaxed tracking-tight text-[color:var(--app-text)]"
+                >
                   {{ activeSentence.text }}
                 </div>
 
@@ -158,7 +208,9 @@
                   v-if="showTranslation"
                   class="mt-4 rounded-3xl border border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] p-4"
                 >
-                  <div class="text-[11px] font-semibold tracking-wide text-[color:var(--app-text-muted)]">
+                  <div
+                    class="text-[11px] font-semibold tracking-wide text-[color:var(--app-text-muted)]"
+                  >
                     Translation
                   </div>
                   <div class="mt-1 text-base font-semibold leading-snug" dir="auto">
@@ -221,9 +273,11 @@
       </div>
 
       <!-- Toast -->
-  <transition name="fade">
+      <transition name="fade">
         <div v-if="toastMessage" class="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 px-4">
-          <div class="flex items-center gap-2 rounded-full border border-white/10 bg-[var(--app-surface-dark-elevated)]/90 px-4 py-2.5 text-xs font-medium text-white shadow-xl backdrop-blur-md">
+          <div
+            class="flex items-center gap-2 rounded-full border border-white/10 bg-[var(--app-surface-dark-elevated)]/90 px-4 py-2.5 text-xs font-medium text-white shadow-xl backdrop-blur-md"
+          >
             <span class="flex h-2 w-2 rounded-full bg-emerald-500"></span>
             {{ toastMessage }}
           </div>
@@ -249,11 +303,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { LessonDetail } from '@/types/lesson'
 import { useLessonShadowing } from '@/composables/useLessonShadowing'
-import { deleteLessonSentence, fetchLessonSentenceTts, generateLessonShadowingSentences } from '@/api/lessonShadowing'
+import { useLessonContentGeneration } from '@/composables/useLessonContentGeneration'
+import {
+  deleteLessonSentence,
+  fetchLessonSentenceTts,
+  generateLessonShadowingSentences,
+} from '@/api/lessonShadowing'
 import ShadowingSentenceEditModal from '../shadowing/ShadowingSentenceEditModal.vue'
 import ShadowingSentenceJsonImportModal from '../shadowing/ShadowingSentenceJsonImportModal.vue'
 
@@ -275,9 +334,12 @@ const {
   reload,
 } = useLessonShadowing(props.lesson.id)
 
-const progressLabel = computed(() => (total.value === 0 ? '0 / 0' : `${activeIndex.value + 1} / ${total.value}`))
-const progressPercent = computed(() => (total.value === 0 ? 0 : Math.round(((activeIndex.value + 1) / total.value) * 100)))
-const sentencesSignature = computed(() => sentences.value.map((s) => s.id).join('-'))
+const progressLabel = computed(() =>
+  total.value === 0 ? '0 / 0' : `${activeIndex.value + 1} / ${total.value}`,
+)
+const progressPercent = computed(() =>
+  total.value === 0 ? 0 : Math.round(((activeIndex.value + 1) / total.value) * 100),
+)
 
 const showTranslation = ref(false)
 
@@ -354,11 +416,8 @@ watch(activeSentence, () => {
 /**
  * Generate / polling
  */
-const isGenerationPending = ref(false)
 const toastMessage = ref('')
-const pendingBaselineSignature = ref<string | null>(null)
 let toastTimeout: number | null = null
-let pollingInterval: number | null = null
 
 const pushToast = (message: string) => {
   toastMessage.value = message
@@ -369,17 +428,26 @@ const pushToast = (message: string) => {
   }, 4000)
 }
 
-const startPolling = () => {
-  if (pollingInterval !== null) return
-  pollingInterval = window.setInterval(() => reload(), 6000)
-}
+const generationTracker = useLessonContentGeneration({
+  lessonId: props.lesson.id,
+  feature: 'shadowing',
+  reloadContent: async () => {
+    await reload()
+  },
+  onReady: () => {
+    pushToast('Shadowing sentences are ready')
+  },
+  onFailed: (state) => {
+    pushToast(String(state?.message ?? 'Sentence generation failed'))
+  },
+})
 
-const stopPolling = () => {
-  if (pollingInterval !== null) {
-    clearInterval(pollingInterval)
-    pollingInterval = null
-  }
-}
+const isGenerationPending = computed(() => generationTracker.isPending.value)
+const generationWaitingLabel = computed(() => {
+  const seconds = generationTracker.waitingSeconds.value
+  if (seconds < 10) return 'a few seconds'
+  return `${seconds}s`
+})
 
 const isGenerating = ref(false)
 const isImportModalOpen = ref(false)
@@ -387,22 +455,21 @@ const isEditModalOpen = ref(false)
 const isDeleting = ref(false)
 
 const handleReloadClick = () => {
-  reload()
+  void reload()
+  void generationTracker.syncStatus()
 }
 
 const handleGenerate = async () => {
   if (isGenerating.value) return
-  pendingBaselineSignature.value = sentencesSignature.value
-  isGenerationPending.value = true
   isGenerating.value = true
-  startPolling()
   try {
-    await generateLessonShadowingSentences(props.lesson.id, { replace_existing: true })
-    pushToast('Shadowing sentence generation queued')
+    const response = await generateLessonShadowingSentences(props.lesson.id, {
+      replace_existing: true,
+    })
+    await generationTracker.beginTracking()
+    pushToast(response.message ?? 'Shadowing sentence generation queued')
   } catch (e) {
     console.error(e)
-    isGenerationPending.value = false
-    stopPolling()
     pushToast('Could not start shadowing generation')
   } finally {
     isGenerating.value = false
@@ -439,28 +506,8 @@ const handleDelete = async () => {
   }
 }
 
-watch(isGenerationPending, (pending) => {
-  if (pending) startPolling()
-  else stopPolling()
-})
-
-watch(sentencesSignature, (signature) => {
-  if (!isGenerationPending.value) return
-  if (signature && signature !== pendingBaselineSignature.value) {
-    isGenerationPending.value = false
-    pendingBaselineSignature.value = null
-    stopPolling()
-    pushToast('Shadowing sentences are ready')
-  }
-})
-
-onMounted(() => {
-  if (isGenerationPending.value && !isReady.value) startPolling()
-})
-
 onBeforeUnmount(() => {
   if (toastTimeout) clearTimeout(toastTimeout)
-  stopPolling()
   if (audio) {
     audio.pause()
     audio.currentTime = 0
@@ -520,13 +567,25 @@ function onPointerUp() {
 /**
  * Rate button classes
  */
-const rateActiveClass = 'border-[color:var(--app-border-strong)] bg-[color:var(--app-accent-soft)] text-[color:var(--app-accent)]'
-const rateIdleClass = 'border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] text-[color:var(--app-text-muted)]'
+const rateActiveClass =
+  'border-[color:var(--app-border-strong)] bg-[color:var(--app-accent-soft)] text-[color:var(--app-accent)]'
+const rateIdleClass =
+  'border-[color:var(--app-border)] bg-[color:var(--app-surface-elevated)] text-[color:var(--app-text-muted)]'
 </script>
 
 <style scoped>
 .fade-enter-active,
-.fade-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.fade-enter-from { opacity: 0; transform: translateY(8px); }
-.fade-leave-to { opacity: 0; transform: translateY(-8px); }
+.fade-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
 </style>
