@@ -2,22 +2,27 @@
 
 namespace App\Services\AzureSpeech;
 
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
+use App\Services\Speech\TtsConfigResolver;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class AzureSpeechTtsService
 {
+    public function __construct(
+        protected TtsConfigResolver $ttsConfig,
+        protected AzureSpeechTtsTextService $ttsText,
+    ) {}
+
     public function synthesizeShadowing(
         string $text,
         ?string $languageCode = null,
         ?string $voice = null,
         string $speed = 'slow',
         ?string $preset = null,
+        string $feature = 'practice_shadowing',
     ): string {
-        return $this->synthesizeShadowingDetailed($text, $languageCode, $voice, $speed, $preset)['url'];
+        return $this->synthesizeShadowingDetailed($text, $languageCode, $voice, $speed, $preset, $feature)['url'];
     }
 
     public function synthesizeShadowingDetailed(
@@ -26,6 +31,7 @@ class AzureSpeechTtsService
         ?string $voice = null,
         string $speed = 'slow',
         ?string $preset = null,
+        string $feature = 'practice_shadowing',
     ): array {
         $text = $this->prepareShadowingText($text);
 
@@ -34,13 +40,24 @@ class AzureSpeechTtsService
         }
 
         $presetConfig = $this->shadowingPreset($preset, $speed);
-        $locale = $this->toAzureLocale($languageCode);
-        $voice = $voice ?? $this->defaultVoiceForLocale($locale);
-        $style = $this->styleForShadowing($locale);
-        $outputFormat = (string) ($presetConfig['output_format'] ?? config('lesson_generation.shadowing_tts.output_format', 'audio-24khz-48kbitrate-mono-mp3'));
+        $locale = $this->ttsConfig->localeForLanguage($languageCode);
+        $style = $this->ttsConfig->styleForLocale($locale);
+        $voice = $this->ttsConfig->voiceForLocale($locale, $style, $voice);
+        $outputFormat = trim((string) ($presetConfig['output_format'] ?? '')) ?: $this->ttsConfig->outputFormat();
         $disk = (string) config('lesson_generation.shadowing_tts.disk', 'public');
 
         $ssml = $this->buildShadowingSsml($text, $locale, $voice, $presetConfig, $style, true);
+        $configSnapshot = $this->ttsConfig->configSnapshot(
+            feature: $feature,
+            locale: $locale,
+            voice: $voice,
+            style: $style,
+            outputFormat: $outputFormat,
+            extra: [
+                'preset' => (string) $presetConfig['name'],
+                'base_rate' => $this->ttsConfig->rate(),
+            ],
+        );
 
         try {
             $binary = $this->requestTts($ssml, $outputFormat);
@@ -69,6 +86,8 @@ class AzureSpeechTtsService
             'style' => $style,
             'preset' => (string) $presetConfig['name'],
             'output_format' => $outputFormat,
+            'generation_version' => $this->ttsConfig->generationVersion(),
+            'config_snapshot' => $configSnapshot,
             'generated_at' => now()->toIso8601String(),
             'sequence' => [
                 'first_pass_rate' => (string) $presetConfig['first_pass_rate'],
@@ -84,40 +103,11 @@ class AzureSpeechTtsService
 
     protected function requestTts(string $ssml, string $outputFormat): string
     {
-        $ttsUrl = $this->ttsUrl();
-        $token = $this->token();
-
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $token,
-            'Content-Type' => 'application/ssml+xml',
-            'X-Microsoft-OutputFormat' => $outputFormat,
-            'User-Agent' => 'zeel-tts',
-        ])
-            ->timeout((int) config('services.azure_speech.tts_timeout', 75))
-            ->connectTimeout((int) config('services.azure_speech.tts_connect_timeout', 10))
-            ->withBody($ssml, 'application/ssml+xml')
-            ->post($ttsUrl);
-
-        if (! $response->successful()) {
-            Log::error('Azure TTS failed', [
-                'status' => $response->status(),
-                'content_type' => $response->header('Content-Type'),
-                'body_head' => mb_substr((string) $response->body(), 0, 2000),
-                'ssml_head' => mb_substr($ssml, 0, 1200),
-            ]);
-
-            throw new \RuntimeException('Azure TTS failed: ' . $response->status() . ' ' . mb_substr((string) $response->body(), 0, 800));
-        }
-
-        $ct = (string) $response->header('Content-Type');
-        $bin = $response->body();
+        $bin = $this->ttsText->synthesizeSsml($ssml, $outputFormat);
 
         if (mb_strlen($bin) < 200) {
             Log::error('Azure TTS returned too small body', [
-                'status' => $response->status(),
-                'content_type' => $ct,
                 'len' => mb_strlen($bin),
-                'body_head' => mb_substr((string) $response->body(), 0, 2000),
                 'ssml_head' => mb_substr($ssml, 0, 1200),
             ]);
 
@@ -127,25 +117,6 @@ class AzureSpeechTtsService
         return $bin;
     }
 
-
-    protected function token(): string
-    {
-        return Cache::remember('azure_speech_token', 540, function () {
-            $response = Http::withHeaders([
-                'Ocp-Apim-Subscription-Key' => $this->key(),
-                'Content-Length' => '0',
-            ])
-                ->timeout((int) config('services.azure_speech.tts_timeout', 75))
-                ->connectTimeout((int) config('services.azure_speech.tts_connect_timeout', 10))
-                ->post($this->tokenUrl());
-
-            if (! $response->successful()) {
-                throw new \RuntimeException('Azure Speech token failed: ' . $response->status() . ' ' . $response->body());
-            }
-
-            return trim($response->body());
-        });
-    }
 
     protected function buildSsml(string $text, string $locale, string $voice, string $rate): string
     {
@@ -162,59 +133,12 @@ class AzureSpeechTtsService
 
     protected function toAzureLocale(?string $languageCode): string
     {
-        $code = strtolower(trim((string) $languageCode));
-        $map = (array) config('lesson_generation.shadowing_tts.locale_map', []);
-
-        if ($code === '') {
-            return 'en-US';
-        }
-
-        foreach ($map as $prefix => $locale) {
-            if (str_starts_with($code, strtolower((string) $prefix))) {
-                return (string) $locale;
-            }
-        }
-
-        return 'en-US';
+        return $this->ttsConfig->localeForLanguage($languageCode);
     }
 
     protected function defaultVoiceForLocale(string $locale): string
     {
-        $map = (array) config('lesson_generation.shadowing_tts.voice_map', []);
-
-        if (is_string($map[$locale] ?? null) && trim((string) $map[$locale]) !== '') {
-            return trim((string) $map[$locale]);
-        }
-
-        return match (true) {
-            str_starts_with($locale, 'en-') => 'en-US-JennyNeural',
-            str_starts_with($locale, 'nl-') => 'nl-NL-ColetteNeural',
-            str_starts_with($locale, 'fa-') => 'fa-IR-DilaraNeural',
-            default => 'en-US-JennyNeural',
-        };
-    }
-
-    protected function tokenUrl(): string
-    {
-        $region = config('services.azure_speech.region');
-        return 'https://' . $region . '.api.cognitive.microsoft.com/sts/v1.0/issueToken';
-    }
-
-    protected function ttsUrl(): string
-    {
-        $region = config('services.azure_speech.region');
-        return 'https://' . $region . '.tts.speech.microsoft.com/cognitiveservices/v1';
-    }
-
-    protected function key(): string
-    {
-        $key = config('services.azure_speech.key');
-
-        if (! $key) {
-            throw new \RuntimeException('AZURE_SPEECH_KEY is missing.');
-        }
-
-        return $key;
+        return $this->ttsConfig->voiceForLocale($locale, $this->ttsConfig->styleForLocale($locale));
     }
 
     protected function buildShadowingSsml(string $text, string $locale, string $voice, array $preset, ?string $style, bool $allowExpressiveMarkup): string
@@ -310,11 +234,7 @@ class AzureSpeechTtsService
 
     protected function styleForShadowing(string $locale): ?string
     {
-        if (str_starts_with($locale, 'en-')) {
-            return 'narration-professional';
-        }
-
-        return null;
+        return $this->ttsConfig->styleForLocale($locale);
     }
 
     protected function shadowingPreset(?string $preset, string $speed): array
@@ -327,9 +247,9 @@ class AzureSpeechTtsService
 
         return array_merge([
             'name' => $name,
-            'first_pass_rate' => '0%',
+            'first_pass_rate' => $this->ttsConfig->rate(),
             'second_pass_rate' => '-12%',
-            'final_pass_rate' => '0%',
+            'final_pass_rate' => $this->ttsConfig->rate(),
             'first_pass_pitch' => '0%',
             'second_pass_pitch' => '0%',
             'final_pass_pitch' => '0%',
@@ -337,7 +257,7 @@ class AzureSpeechTtsService
             'repeat_pause_ms' => 1550,
             'final_tail_pause_ms' => 220,
             'emphasis_level' => 'moderate',
-            'output_format' => (string) config('lesson_generation.shadowing_tts.output_format', 'audio-24khz-48kbitrate-mono-mp3'),
+            'output_format' => $this->ttsConfig->outputFormat(),
         ], $selected, [
             'name' => array_key_exists($name, $presets) ? $name : ($defaultName !== '' ? $defaultName : 'standard'),
         ]);

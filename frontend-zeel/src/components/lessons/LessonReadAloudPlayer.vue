@@ -22,6 +22,10 @@ type ReadAloudRes = {
   format?: string | null
   chunk_count?: number | null
   generated_at?: string | null
+  generation_version?: string | null
+  current_generation_version?: string | null
+  is_stale?: boolean | null
+  config_snapshot?: Record<string, unknown> | null
 }
 
 const variant = computed(() => props.variant ?? 'inline')
@@ -45,6 +49,7 @@ const audioUrl = computed(() => {
 })
 const canGenerate = computed(() => !isLoading.value && status.value !== 'processing')
 const isReady = computed(() => status.value === 'ready' && !!audioUrl.value)
+const isStale = computed(() => state.value.is_stale === true)
 
 const wrapperClass = computed(() => {
   if (variant.value === 'sheet') {
@@ -103,6 +108,18 @@ const refreshState = async () => {
   const res = (await getLessonReadAloud(props.lessonId)) as ReadAloudRes
   state.value = res
   return res
+}
+
+const handlePlay = () => {
+  isPlaying.value = true
+}
+
+const handlePause = () => {
+  isPlaying.value = false
+}
+
+const handleEnded = () => {
+  isPlaying.value = false
 }
 
 const pollUntilComplete = async () => {
@@ -188,7 +205,16 @@ watch(
 
 watch(
   () => playbackRate.value,
-  () => applyPlaybackRate(),
+  () => {
+    applyPlaybackRate()
+  },
+)
+
+watch(
+  () => audioUrl.value,
+  () => {
+    isPlaying.value = false
+  },
 )
 
 onMounted(async () => {
@@ -218,7 +244,9 @@ onBeforeUnmount(() => {
         <p class="text-sm font-semibold text-[var(--app-text)]">Read Aloud</p>
         <p class="mt-1 text-xs text-[var(--app-text-muted)]">
           {{ status === 'ready'
-            ? 'Natural read-aloud audio is ready.'
+            ? isStale
+              ? 'Read-aloud settings changed. Regenerate for improved audio.'
+              : 'Natural read-aloud audio is ready.'
             : status === 'processing'
               ? 'Generating read-aloud audio...'
               : 'Generate natural audio from the original lesson text.' }}
@@ -241,7 +269,7 @@ onBeforeUnmount(() => {
           icon="solar:play-circle-bold-duotone"
           class="h-4 w-4"
         />
-        <span>{{ status === 'ready' ? 'Regenerate' : 'Generate' }}</span>
+        <span>{{ status === 'ready' ? (isStale ? 'Update' : 'Regenerate') : 'Generate' }}</span>
       </button>
     </div>
 
@@ -285,9 +313,9 @@ onBeforeUnmount(() => {
         preload="metadata"
         :src="audioUrl"
         @loadedmetadata="applyPlaybackRate"
-        @play="isPlaying = true"
-        @pause="isPlaying = false"
-        @ended="isPlaying = false"
+        @play="handlePlay"
+        @pause="handlePause"
+        @ended="handleEnded"
       />
     </div>
 

@@ -414,7 +414,7 @@ onBeforeUnmount(() => {
               </template>
 
               <template v-else>
-                <span v-html="block.html"></span>
+                <span class="whitespace-pre-wrap" v-html="block.html"></span>
               </template>
             </div>
           </template>
@@ -431,7 +431,7 @@ onBeforeUnmount(() => {
                 :class="row.speaker === leftSpeaker ? '' : 'bg-[var(--app-surface-elevated)]'"
               >
                 <div class="text-[10px] font-bold opacity-70">{{ row.speaker }}</div>
-                <div class="mt-1 leading-relaxed whitespace-pre-wrap">{{ row.text }}</div>
+                <div class="mt-1 leading-relaxed whitespace-pre-wrap" v-html="formatText(String(row?.text ?? ''))"></div>
               </div>
             </div>
           </div>

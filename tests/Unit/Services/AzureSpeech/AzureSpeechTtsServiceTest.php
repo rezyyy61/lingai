@@ -26,7 +26,7 @@ class AzureSpeechTtsServiceTest extends TestCase
             'repeat_pause_ms' => 1600,
             'final_tail_pause_ms' => 250,
             'emphasis_level' => 'moderate',
-            'output_format' => 'audio-24khz-48kbitrate-mono-mp3',
+            'output_format' => 'audio-24khz-160kbitrate-mono-mp3',
         ]);
 
         Storage::fake('public');
@@ -48,7 +48,10 @@ class AzureSpeechTtsServiceTest extends TestCase
 
         $this->assertSame('standard', $result['preset']);
         $this->assertSame('en-US', $result['locale']);
-        $this->assertSame('en-US-JennyNeural', $result['voice']);
+        $this->assertSame('en-US-GuyNeural', $result['voice']);
+        $this->assertSame('read-aloud-voice-pacing-v3', $result['generation_version']);
+        $this->assertSame('en-US-GuyNeural', data_get($result, 'config_snapshot.voice'));
+        $this->assertSame('audio-24khz-160kbitrate-mono-mp3', data_get($result, 'config_snapshot.output_format'));
         $this->assertSame('lesson_tts', dirname((string) $result['path']));
         Storage::disk('public')->assertExists((string) $result['path']);
 
@@ -73,6 +76,7 @@ class AzureSpeechTtsServiceTest extends TestCase
         config()->set('services.azure_speech.region', 'westeurope');
         config()->set('lesson_generation.shadowing_tts.disk', 'public');
         config()->set('lesson_generation.shadowing_tts.directory', 'lesson_tts');
+        config()->set('lesson_generation.read_aloud.style_map.en-US', 'narration-professional');
 
         Storage::fake('public');
 

@@ -24,28 +24,31 @@ class GenerateLessonReadAloudTest extends TestCase
         config()->set('lesson_generation.read_aloud.directory', 'lessons');
         config()->set('lesson_generation.read_aloud.format', 'mp3');
         config()->set('lesson_generation.read_aloud.locale_fallback', 'en-US');
+        config()->set('lesson_generation.read_aloud.voice_map', ['en-US' => 'en-US-JennyNeural']);
         config()->set('lesson_generation.read_aloud.rate', '-4%');
-        config()->set('lesson_generation.read_aloud.break_ms', 420);
+        config()->set('lesson_generation.read_aloud.style_map', ['en-US' => 'chat']);
+        config()->set('lesson_generation.read_aloud.chunk_break_ms', 0);
+        config()->set('lesson_generation.read_aloud.paragraph_break_ms', 520);
         config()->set('lesson_generation.read_aloud.sentence_break_ms', 180);
         config()->set('lesson_generation.read_aloud.chunk.max_chars', 80);
+        config()->set('lesson_generation.read_aloud.generation_version', 'read-aloud-quality-v2');
 
         Storage::fake('public');
 
         $tts = Mockery::mock(AzureSpeechTtsTextService::class);
-        $tts->shouldReceive('pickVoiceShortName')
-            ->once()
-            ->with('en-US', 'Female', null)
-            ->andReturn('en-US-JennyNeural');
         $tts->shouldReceive('synthesizeSsml')
             ->twice()
-            ->andReturn('chunk-audio-1', 'chunk-audio-2');
+            ->andReturn(
+                'chunk-audio-1',
+                'chunk-audio-2',
+            );
 
         $merger = Mockery::mock(LessonAudioChunkMerger::class);
         $merger->shouldReceive('merge')
             ->once()
             ->with(Mockery::on(function (array $chunks) {
                 return count($chunks) === 2
-                    && (int) ($chunks[0]['pause_ms'] ?? -1) === 420
+                    && (int) ($chunks[0]['pause_ms'] ?? -1) === 0
                     && (int) ($chunks[1]['pause_ms'] ?? -1) === 0;
             }), 'mp3')
             ->andReturn('merged-read-aloud');
@@ -69,14 +72,28 @@ class GenerateLessonReadAloudTest extends TestCase
         $this->assertSame('en-US-JennyNeural', data_get($result->analysis_meta, 'read_aloud.voice'));
         $this->assertSame('en-US', data_get($result->analysis_meta, 'read_aloud.locale'));
         $this->assertSame('-4%', data_get($result->analysis_meta, 'read_aloud.rate'));
+        $this->assertSame('chat', data_get($result->analysis_meta, 'read_aloud.style'));
         $this->assertSame('mp3', data_get($result->analysis_meta, 'read_aloud.format'));
+        $this->assertSame('read-aloud-quality-v2', data_get($result->analysis_meta, 'read_aloud.generation_version'));
+        $this->assertSame(0, data_get($result->analysis_meta, 'read_aloud.config_snapshot.chunk_break_ms'));
+        $this->assertSame(520, data_get($result->analysis_meta, 'read_aloud.config_snapshot.paragraph_break_ms'));
         $this->assertSame('value', data_get($result->analysis_meta, 'existing'));
         $this->assertGreaterThanOrEqual(2, (int) data_get($result->analysis_meta, 'read_aloud.chunk_count'));
+        $this->assertSame(
+            'Emma looked at her watch.',
+            data_get($result->analysis_meta, 'read_aloud.chunks.0.text')
+        );
+        $this->assertSame('chunk', data_get($result->analysis_meta, 'read_aloud.chunks.0.type'));
+        $this->assertFalse(data_get($result->analysis_meta, 'read_aloud.chunks.0.ends_paragraph'));
+        $this->assertNull(data_get($result->analysis_meta, 'read_aloud.sync_precision'));
+        $this->assertNull(data_get($result->analysis_meta, 'read_aloud.alignment_provider'));
+        $this->assertNull(data_get($result->analysis_meta, 'read_aloud.word_timestamps'));
     }
 
     public function test_it_does_not_overwrite_existing_successful_read_aloud_data_when_generation_fails(): void
     {
         config()->set('lesson_generation.read_aloud.chunk.max_chars', 80);
+        config()->set('lesson_generation.read_aloud.voice_map', []);
 
         $tts = Mockery::mock(AzureSpeechTtsTextService::class);
         $tts->shouldReceive('pickVoiceShortName')

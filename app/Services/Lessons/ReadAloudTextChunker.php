@@ -6,20 +6,36 @@ class ReadAloudTextChunker
 {
     public function chunk(string $text): array
     {
+        return array_map(
+            static fn (array $chunk) => (string) $chunk['text'],
+            $this->chunkWithMetadata($text)
+        );
+    }
+
+    public function chunkWithMetadata(string $text): array
+    {
         $paragraphs = $this->paragraphs($text);
         $maxChars = $this->maxChars();
         $chunks = [];
 
-        foreach ($paragraphs as $paragraph) {
-            if (mb_strlen($paragraph) <= $maxChars) {
-                $chunks[] = $paragraph;
-                continue;
-            }
+        foreach ($paragraphs as $paragraphIndex => $paragraph) {
+            $paragraphChunks = mb_strlen($paragraph) <= $maxChars
+                ? [$paragraph]
+                : $this->chunkParagraph($paragraph, $maxChars);
 
-            $chunks = [...$chunks, ...$this->chunkParagraph($paragraph, $maxChars)];
+            $paragraphChunks = array_values(array_filter($paragraphChunks, fn (string $chunk) => trim($chunk) !== ''));
+
+            foreach ($paragraphChunks as $chunkIndex => $chunk) {
+                $chunks[] = [
+                    'text' => $chunk,
+                    'paragraph_index' => $paragraphIndex,
+                    'chunk_index' => count($chunks),
+                    'ends_paragraph' => $chunkIndex === array_key_last($paragraphChunks),
+                ];
+            }
         }
 
-        return array_values(array_filter($chunks, fn (string $chunk) => trim($chunk) !== ''));
+        return $chunks;
     }
 
     protected function chunkParagraph(string $paragraph, int $maxChars): array
@@ -199,6 +215,6 @@ class ReadAloudTextChunker
 
     protected function maxChars(): int
     {
-        return max(180, (int) config('lesson_generation.read_aloud.chunk.max_chars', 420));
+        return max(80, (int) config('lesson_generation.read_aloud.chunk.max_chars', 1600));
     }
 }

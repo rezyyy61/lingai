@@ -6,6 +6,7 @@ use App\Models\Lesson;
 use App\Services\Audio\LessonAudioChunkMerger;
 use App\Services\AzureSpeech\AzureSpeechTtsTextService;
 use App\Services\Speech\ReadAloudSsmlBuilder;
+use App\Services\Speech\TtsConfigResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -18,6 +19,7 @@ class GenerateLessonReadAloud
         protected ReadAloudTextChunker $chunker,
         protected ReadAloudSsmlBuilder $ssmlBuilder,
         protected LessonAudioChunkMerger $chunkMerger,
+        protected TtsConfigResolver $ttsConfig,
     ) {}
 
     public function handle(Lesson $lesson): Lesson
@@ -31,9 +33,10 @@ class GenerateLessonReadAloud
         $format = $this->format();
         $disk = (string) config('lesson_generation.read_aloud.disk', config('lesson_generation.audio.disk', 'public'));
         $locale = $this->localeForLesson($lesson);
-        $style = $this->style();
+        $style = $this->style($locale);
         $voice = $this->voiceForLocale($locale, $style);
-        $chunks = $this->chunker->chunk($text);
+        $chunkItems = $this->chunker->chunkWithMetadata($text);
+        $chunks = array_map(static fn (array $chunk) => (string) $chunk['text'], $chunkItems);
 
         if ($chunks === []) {
             throw new RuntimeException('Lesson original text could not be chunked for read-aloud audio.');
@@ -41,7 +44,8 @@ class GenerateLessonReadAloud
 
         $audioChunks = [];
 
-        foreach ($chunks as $index => $chunk) {
+        foreach ($chunkItems as $index => $chunkItem) {
+            $chunk = (string) ($chunkItem['text'] ?? '');
             $ssml = $this->ssmlBuilder->build(
                 text: $chunk,
                 locale: $locale,
@@ -49,11 +53,12 @@ class GenerateLessonReadAloud
                 rate: $this->rate(),
                 style: $style,
                 sentenceBreakMs: $this->sentenceBreakMs(),
+                paragraphBreakMs: $this->paragraphBreakMs(),
             );
 
             $audioChunks[] = [
                 'binary' => $this->tts->synthesizeSsml($ssml, 'riff-24khz-16bit-mono-pcm'),
-                'pause_ms' => $index === array_key_last($chunks) ? 0 : $this->chunkBreakMs(),
+                'pause_ms' => $this->pauseAfterChunk($chunkItem, $index === array_key_last($chunkItems)),
             ];
         }
 
@@ -62,7 +67,7 @@ class GenerateLessonReadAloud
         Storage::disk($disk)->put($path, $binary);
         $url = Storage::disk($disk)->url($path);
 
-        DB::transaction(function () use ($lesson, $path, $url, $disk, $voice, $locale, $format, $chunks): void {
+        DB::transaction(function () use ($lesson, $path, $url, $disk, $voice, $locale, $style, $format, $chunks, $chunkItems): void {
             /** @var Lesson $freshLesson */
             $freshLesson = Lesson::query()
                 ->whereKey($lesson->id)
@@ -74,11 +79,22 @@ class GenerateLessonReadAloud
             data_set($meta, 'read_aloud.voice', $voice);
             data_set($meta, 'read_aloud.locale', $locale);
             data_set($meta, 'read_aloud.rate', $this->rate());
-            data_set($meta, 'read_aloud.style', $this->style());
+            data_set($meta, 'read_aloud.style', $this->style($locale));
             data_set($meta, 'read_aloud.format', $format);
+            data_set($meta, 'read_aloud.generation_version', $this->generationVersion());
+            data_set($meta, 'read_aloud.config_snapshot', $this->configSnapshot($locale, $voice, $style, $format));
             data_set($meta, 'read_aloud.generated_at', now()->toIso8601String());
             data_set($meta, 'read_aloud.chunk_count', count($chunks));
+            data_set($meta, 'read_aloud.chunks', $this->timingChunks($chunkItems));
+            data_forget($meta, 'read_aloud.sync_precision');
+            data_forget($meta, 'read_aloud.alignment_provider');
+            data_forget($meta, 'read_aloud.alignment_note');
+            data_forget($meta, 'read_aloud.word_timestamps');
+            data_forget($meta, 'read_aloud.sentence_timestamps');
+            data_forget($meta, 'read_aloud.timings');
             data_set($meta, 'read_aloud.break_ms', $this->chunkBreakMs());
+            data_set($meta, 'read_aloud.paragraph_break_ms', $this->paragraphBreakMs());
+            data_set($meta, 'read_aloud.sentence_break_ms', $this->sentenceBreakMs());
             data_set($meta, 'read_aloud.disk', $disk);
             data_set($meta, 'read_aloud.audio_path', $path);
             data_set($meta, 'read_aloud.audio_url', $url);
@@ -93,6 +109,34 @@ class GenerateLessonReadAloud
         return $lesson->fresh();
     }
 
+    protected function pauseAfterChunk(array $chunk, bool $isLastChunk): int
+    {
+        if ($isLastChunk) {
+            return 0;
+        }
+
+        if ((bool) ($chunk['ends_paragraph'] ?? false)) {
+            return $this->paragraphBreakMs();
+        }
+
+        return $this->chunkBreakMs();
+    }
+
+    protected function timingChunks(array $chunks): array
+    {
+        return array_values(array_map(
+            fn (array $chunk, int $index) => [
+                'type' => 'chunk',
+                'index' => $index,
+                'text' => (string) ($chunk['text'] ?? ''),
+                'paragraph_index' => (int) ($chunk['paragraph_index'] ?? 0),
+                'ends_paragraph' => (bool) ($chunk['ends_paragraph'] ?? false),
+            ],
+            $chunks,
+            array_keys($chunks)
+        ));
+    }
+
     protected function format(): string
     {
         $format = strtolower(trim((string) config('lesson_generation.read_aloud.format', 'mp3')));
@@ -102,64 +146,63 @@ class GenerateLessonReadAloud
 
     protected function rate(): string
     {
-        $rate = trim((string) config('lesson_generation.read_aloud.rate', '0%'));
-
-        return $rate !== '' ? $rate : '0%';
+        return $this->ttsConfig->rate();
     }
 
-    protected function style(): ?string
+    protected function style(string $locale): ?string
     {
-        $style = trim((string) config('lesson_generation.read_aloud.style', ''));
-
-        return $style !== '' ? $style : null;
+        return $this->ttsConfig->styleForLocale($locale);
     }
 
     protected function chunkBreakMs(): int
     {
-        return max(0, (int) config('lesson_generation.read_aloud.break_ms', 420));
+        return max(0, (int) config(
+            'lesson_generation.read_aloud.chunk_break_ms',
+            config('lesson_generation.read_aloud.break_ms', 0)
+        ));
+    }
+
+    protected function paragraphBreakMs(): int
+    {
+        return max(0, (int) config('lesson_generation.read_aloud.paragraph_break_ms', 520));
     }
 
     protected function sentenceBreakMs(): int
     {
-        return max(0, (int) config('lesson_generation.read_aloud.sentence_break_ms', 180));
+        return max(0, (int) config('lesson_generation.read_aloud.sentence_break_ms', 140));
+    }
+
+    protected function generationVersion(): string
+    {
+        return $this->ttsConfig->generationVersion();
+    }
+
+    protected function configSnapshot(string $locale, string $voice, ?string $style, string $format): array
+    {
+        return [
+            ...$this->ttsConfig->configSnapshot(
+                feature: 'lesson_read_aloud',
+                locale: $locale,
+                voice: $voice,
+                style: $style,
+                outputFormat: $format,
+            ),
+            'format' => $format,
+            'chunk_max_chars' => (int) config('lesson_generation.read_aloud.chunk.max_chars', 1600),
+            'chunk_break_ms' => $this->chunkBreakMs(),
+            'paragraph_break_ms' => $this->paragraphBreakMs(),
+            'sentence_break_ms' => $this->sentenceBreakMs(),
+        ];
     }
 
     protected function voiceForLocale(string $locale, ?string $style): string
     {
-        $configured = trim((string) config('lesson_generation.read_aloud.voice', ''));
-
-        if ($configured !== '') {
-            return $configured;
-        }
-
-        return $this->tts->pickVoiceShortName($locale, 'Female', $style)
-            ?: $this->tts->pickVoiceShortName($locale, 'Female', null)
-            ?: $this->tts->pickVoiceShortName($locale, 'Male', $style)
-            ?: $this->tts->pickVoiceShortName($locale, 'Male', null)
-            ?: throw new RuntimeException('No Azure Speech voice is available for read-aloud generation.');
+        return $this->ttsConfig->voiceForLocale($locale, $style);
     }
 
     protected function localeForLesson(Lesson $lesson): string
     {
-        $languageCode = trim((string) ($lesson->language ?: $lesson->target_language ?: ''));
-        $fallback = trim((string) config('lesson_generation.read_aloud.locale_fallback', 'en-US'));
-
-        return match (true) {
-            $languageCode === 'nl' || str_starts_with($languageCode, 'nl-') => 'nl-NL',
-            $languageCode === 'fa' || str_starts_with($languageCode, 'fa-') => 'fa-IR',
-            $languageCode === 'fr' || str_starts_with($languageCode, 'fr-') => 'fr-FR',
-            $languageCode === 'de' || str_starts_with($languageCode, 'de-') => 'de-DE',
-            $languageCode === 'es' || str_starts_with($languageCode, 'es-') => 'es-ES',
-            $languageCode === 'it' || str_starts_with($languageCode, 'it-') => 'it-IT',
-            $languageCode === 'pt' || str_starts_with($languageCode, 'pt-') => 'pt-PT',
-            $languageCode === 'tr' || str_starts_with($languageCode, 'tr-') => 'tr-TR',
-            $languageCode === 'ar' || str_starts_with($languageCode, 'ar-') => 'ar-SA',
-            $languageCode === 'ja' || str_starts_with($languageCode, 'ja-') => 'ja-JP',
-            $languageCode === 'ko' || str_starts_with($languageCode, 'ko-') => 'ko-KR',
-            $languageCode === 'zh' || str_starts_with($languageCode, 'zh-') => 'zh-CN',
-            $languageCode === 'en' || str_starts_with($languageCode, 'en-') => 'en-US',
-            default => $fallback !== '' ? $fallback : 'en-US',
-        };
+        return $this->ttsConfig->localeForLanguage($lesson->language ?: $lesson->target_language);
     }
 
     protected function buildAudioPath(Lesson $lesson, string $format): string
