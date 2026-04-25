@@ -1,0 +1,35 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    private const INDEX_NAME = 'lessons_user_workspace_created_idx';
+
+    public function up(): void
+    {
+        if (Schema::hasIndex('lessons', self::INDEX_NAME)) {
+            return;
+        }
+
+        Schema::table('lessons', function (Blueprint $table) {
+            $table->index(
+                ['user_id', 'workspace_id', 'created_at'],
+                self::INDEX_NAME,
+            );
+        });
+    }
+
+    public function down(): void
+    {
+        if (! Schema::hasIndex('lessons', self::INDEX_NAME)) {
+            return;
+        }
+
+        Schema::table('lessons', function (Blueprint $table) {
+            $table->dropIndex(self::INDEX_NAME);
+        });
+    }
+};
