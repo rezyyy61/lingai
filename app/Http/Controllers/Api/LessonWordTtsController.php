@@ -4,14 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\LessonWord;
-use App\Services\AzureSpeech\AzureSpeechTtsService;
+use App\Services\Speech\TextToSpeechManager;
 use App\Services\Speech\TtsConfigResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class LessonWordTtsController extends Controller
 {
-    public function show(Request $request, LessonWord $word, AzureSpeechTtsService $tts, TtsConfigResolver $ttsConfig)
+    public function show(Request $request, LessonWord $word, TextToSpeechManager $ttsManager, TtsConfigResolver $ttsConfig)
     {
         if (
             $word->tts_audio_path
@@ -34,7 +34,7 @@ class LessonWordTtsController extends Controller
         $language = optional($word->lesson)->target_language
             ?? config('learning_languages.default_target', 'en');
 
-        $result = $tts->synthesizeShadowingDetailed(
+        $result = $ttsManager->providerFor('practice_flashcard')->synthesizeShadowingDetailed(
             text: $text,
             languageCode: $language,
             voice: null,

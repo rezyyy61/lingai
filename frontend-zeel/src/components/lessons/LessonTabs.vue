@@ -49,6 +49,22 @@ const tools = [
   },
 ] as const
 const activeTool = computed(() => tools.find(tool => tool.id === activeTab.value) || tools[0])
+const activeComponent = computed(() => (
+  activeTab.value === 'flashcards' ? LessonTabFlashcards
+    : activeTab.value === 'shadowing' ? LessonTabShadowing
+      : activeTab.value === 'grammar' ? LessonGrammarTab
+        : activeTab.value === 'exercises' ? LessonTabExercises
+          : LessonTabNotes
+))
+const activeComponentProps = computed(() => (
+  activeTab.value === 'shadowing'
+    ? { lesson: props.lesson }
+    : activeTab.value === 'flashcards'
+      ? { lessonId: props.lesson.id, lesson: props.lesson }
+      : activeTab.value === 'grammar' || activeTab.value === 'exercises'
+        ? { lessonId: props.lesson.id }
+        : {}
+))
 
 const setActiveTab = (id: typeof activeTab.value) => {
   activeTab.value = id
@@ -162,15 +178,9 @@ const exitDetail = () => {
             :class="activeTab === 'flashcards' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto custom-scrollbar'"
           >
             <KeepAlive>
-               <component :is="
-                  activeTab === 'flashcards' ? LessonTabFlashcards :
-                  activeTab === 'shadowing' ? LessonTabShadowing :
-                  activeTab === 'grammar' ? LessonGrammarTab :
-                  activeTab === 'exercises' ? LessonTabExercises :
-                  LessonTabNotes
-               "
-               :lesson-id="lesson.id"
-               :lesson="lesson"
+               <component
+                 :is="activeComponent"
+                 v-bind="activeComponentProps"
                />
             </KeepAlive>
           </div>

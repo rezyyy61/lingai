@@ -10,6 +10,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'playing-change', value: boolean): void
+  (e: 'sync-change', value: {
+    activeTokenIndex: number | null
+    timings: ReadAloudWordTiming[]
+    chunks: ReadAloudChunk[]
+    available: boolean
+  }): void
 }>()
 
 type ReadAloudRes = {
@@ -26,7 +32,33 @@ type ReadAloudRes = {
   current_generation_version?: string | null
   is_stale?: boolean | null
   config_snapshot?: Record<string, unknown> | null
+  sync_precision?: string | null
+  alignment_provider?: string | null
+  alignment_note?: string | null
+  chunks?: ReadAloudChunk[] | null
+  word_timestamps?: ReadAloudWordTiming[] | null
+  timings?: ReadAloudWordTiming[] | null
 }
+
+type ReadAloudWordTiming = {
+  text: string
+  start: number
+  end: number
+  start_char: number | null
+  end_char: number | null
+  chunk_index: number
+}
+
+type ReadAloudChunk = {
+  index: number
+  text?: string
+  spoken_text?: string | null
+  word_timestamps?: ReadAloudWordTiming[] | null
+}
+
+type RenderSegment =
+  | { type: 'text'; text: string }
+  | { type: 'token'; text: string; tokenIndex: number }
 
 const variant = computed(() => props.variant ?? 'inline')
 const isLoading = ref(false)
@@ -40,7 +72,9 @@ const state = ref<ReadAloudRes>({
 })
 const audioElement = ref<HTMLAudioElement | null>(null)
 const isPlaying = ref(false)
+const activeTokenIndex = ref<number | null>(null)
 let pollingTimer: number | null = null
+let animationFrameId: number | null = null
 
 const status = computed(() => state.value.status ?? 'pending')
 const audioUrl = computed(() => {
@@ -50,6 +84,48 @@ const audioUrl = computed(() => {
 const canGenerate = computed(() => !isLoading.value && status.value !== 'processing')
 const isReady = computed(() => status.value === 'ready' && !!audioUrl.value)
 const isStale = computed(() => state.value.is_stale === true)
+const wordTimings = computed<ReadAloudWordTiming[]>(() => {
+  const direct = Array.isArray(state.value.timings) ? state.value.timings : state.value.word_timestamps
+
+  if (!Array.isArray(direct)) {
+    return []
+  }
+
+  return direct
+    .filter((timing): timing is ReadAloudWordTiming => (
+      typeof timing?.text === 'string'
+      && typeof timing?.start === 'number'
+      && typeof timing?.end === 'number'
+      && typeof timing?.chunk_index === 'number'
+    ))
+    .sort((a, b) => a.start - b.start)
+})
+const timedChunks = computed(() => {
+  if (!Array.isArray(state.value.chunks)) {
+    return []
+  }
+
+  let tokenOffset = 0
+
+  return state.value.chunks
+    .filter((chunk): chunk is ReadAloudChunk => typeof chunk?.index === 'number')
+    .map((chunk) => {
+      const chunkTokens = wordTimings.value.filter((timing) => timing.chunk_index === chunk.index)
+      const spokenText = typeof chunk.spoken_text === 'string' && chunk.spoken_text.trim() !== ''
+        ? chunk.spoken_text
+        : (typeof chunk.text === 'string' ? chunk.text : '')
+      const segments = buildRenderSegments(spokenText, chunkTokens, tokenOffset)
+      tokenOffset += chunkTokens.length
+
+      return {
+        ...chunk,
+        spokenText,
+        chunkTokens,
+        segments,
+      }
+    })
+})
+const hasTimingHighlight = computed(() => timedChunks.value.some((chunk) => chunk.segments.length > 0))
 
 const wrapperClass = computed(() => {
   if (variant.value === 'sheet') {
@@ -64,10 +140,25 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => [activeTokenIndex.value, wordTimings.value, timedChunks.value, hasTimingHighlight.value] as const,
+  () => {
+    emit('sync-change', {
+      activeTokenIndex: activeTokenIndex.value,
+      timings: wordTimings.value,
+      chunks: state.value.chunks ?? [],
+      available: hasTimingHighlight.value,
+    })
+  },
+  { immediate: true, deep: true },
+)
+
 const destroyAudio = () => {
+  stopAnimationLoop()
   if (!audioElement.value) return
   audioElement.value.pause()
   isPlaying.value = false
+  activeTokenIndex.value = null
 }
 
 const stopPolling = () => {
@@ -112,14 +203,18 @@ const refreshState = async () => {
 
 const handlePlay = () => {
   isPlaying.value = true
+  startAnimationLoop()
 }
 
 const handlePause = () => {
   isPlaying.value = false
+  stopAnimationLoop()
 }
 
 const handleEnded = () => {
   isPlaying.value = false
+  stopAnimationLoop()
+  activeTokenIndex.value = null
 }
 
 const pollUntilComplete = async () => {
@@ -214,6 +309,8 @@ watch(
   () => audioUrl.value,
   () => {
     isPlaying.value = false
+    activeTokenIndex.value = null
+    stopAnimationLoop()
   },
 )
 
@@ -235,6 +332,107 @@ onBeforeUnmount(() => {
   destroyAudio()
   stopPolling()
 })
+
+const buildRenderSegments = (text: string, tokens: ReadAloudWordTiming[], tokenOffset: number): RenderSegment[] => {
+  if (text.trim() === '' || tokens.length === 0) {
+    return text === '' ? [] : [{ type: 'text', text }]
+  }
+
+  const segments: RenderSegment[] = []
+  let cursor = 0
+
+  tokens.forEach((token, index) => {
+    const startChar = typeof token.start_char === 'number' ? token.start_char : null
+    const endChar = typeof token.end_char === 'number' ? token.end_char : null
+
+    if (startChar === null || endChar === null || startChar < cursor || endChar > text.length || endChar <= startChar) {
+      return
+    }
+
+    if (startChar > cursor) {
+      segments.push({
+        type: 'text',
+        text: text.slice(cursor, startChar),
+      })
+    }
+
+    segments.push({
+      type: 'token',
+      text: text.slice(startChar, endChar),
+      tokenIndex: tokenOffset + index,
+    })
+    cursor = endChar
+  })
+
+  if (cursor < text.length) {
+    segments.push({
+      type: 'text',
+      text: text.slice(cursor),
+    })
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', text }]
+}
+
+const findActiveTokenIndex = (currentTime: number): number | null => {
+  const timings = wordTimings.value
+
+  if (timings.length === 0) {
+    return null
+  }
+
+  let low = 0
+  let high = timings.length - 1
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const token = timings[mid]
+
+    if (!token) {
+      return null
+    }
+
+    if (currentTime < token.start) {
+      high = mid - 1
+      continue
+    }
+
+    if (currentTime >= token.end) {
+      low = mid + 1
+      continue
+    }
+
+    return mid
+  }
+
+  return null
+}
+
+const updateHighlight = () => {
+  if (!audioElement.value || !isPlaying.value) {
+    return
+  }
+
+  activeTokenIndex.value = findActiveTokenIndex(audioElement.value.currentTime)
+  animationFrameId = window.requestAnimationFrame(updateHighlight)
+}
+
+const stopAnimationLoop = () => {
+  if (animationFrameId !== null) {
+    window.cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
+  }
+}
+
+const startAnimationLoop = () => {
+  stopAnimationLoop()
+
+  if (!audioElement.value || wordTimings.value.length === 0) {
+    return
+  }
+
+  updateHighlight()
+}
 </script>
 
 <template>
@@ -317,6 +515,7 @@ onBeforeUnmount(() => {
         @pause="handlePause"
         @ended="handleEnded"
       />
+
     </div>
 
     <div

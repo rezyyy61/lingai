@@ -3,8 +3,8 @@
 namespace App\Services\AzureSpeech;
 
 use App\Services\Speech\TtsConfigResolver;
+use App\Services\Speech\TtsAudioStorage;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class AzureSpeechTtsService
@@ -12,6 +12,7 @@ class AzureSpeechTtsService
     public function __construct(
         protected TtsConfigResolver $ttsConfig,
         protected AzureSpeechTtsTextService $ttsText,
+        protected TtsAudioStorage $storage,
     ) {}
 
     public function synthesizeShadowing(
@@ -57,6 +58,7 @@ class AzureSpeechTtsService
                 'preset' => (string) $presetConfig['name'],
                 'base_rate' => $this->ttsConfig->rate(),
             ],
+            provider: 'azure',
         );
 
         try {
@@ -74,13 +76,17 @@ class AzureSpeechTtsService
             $binary = $this->requestTts($ssml, $outputFormat);
         }
 
-        $path = $this->buildStoragePath($outputFormat);
-        Storage::disk($disk)->put($path, $binary);
+        $stored = $this->storage->store(
+            binary: $binary,
+            disk: $disk,
+            directory: (string) config('lesson_generation.shadowing_tts.directory', 'lesson_tts'),
+            outputFormat: $outputFormat,
+        );
 
         return [
-            'path' => $path,
-            'url' => Storage::disk($disk)->url($path),
-            'disk' => $disk,
+            'path' => $stored['path'],
+            'url' => $stored['url'],
+            'disk' => $stored['disk'],
             'voice' => $voice,
             'locale' => $locale,
             'style' => $style,
@@ -315,24 +321,6 @@ class AzureSpeechTtsService
         }
 
         return $text;
-    }
-
-    protected function buildStoragePath(string $outputFormat): string
-    {
-        $directory = trim((string) config('lesson_generation.shadowing_tts.directory', 'lesson_tts'), '/');
-
-        return $directory . '/' . Str::uuid() . '.' . $this->extensionForOutputFormat($outputFormat);
-    }
-
-    protected function extensionForOutputFormat(string $outputFormat): string
-    {
-        $format = strtolower($outputFormat);
-
-        if (str_contains($format, 'wav') || str_contains($format, 'riff')) {
-            return 'wav';
-        }
-
-        return 'mp3';
     }
 
     protected function wordCount(string $text): int

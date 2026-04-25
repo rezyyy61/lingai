@@ -33,9 +33,30 @@ class TtsConfigResolver
 
     public function voiceForLocale(string $locale, ?string $style = null, ?string $explicitVoice = null): string
     {
+        return $this->voiceForLocaleUsingProvider($locale, $style, $explicitVoice, 'azure');
+    }
+
+    public function voiceForLocaleUsingProvider(
+        string $locale,
+        ?string $style = null,
+        ?string $explicitVoice = null,
+        ?string $provider = null,
+    ): string
+    {
         $explicitVoice = trim((string) $explicitVoice);
         if ($explicitVoice !== '') {
             return $explicitVoice;
+        }
+
+        $provider = $this->normalizeProvider($provider);
+        if ($provider === 'elevenlabs') {
+            $configured = trim((string) config('services.tts.elevenlabs.voice_id', ''));
+
+            if ($configured === '') {
+                throw new RuntimeException('No ElevenLabs voice is configured for TTS generation.');
+            }
+
+            return $configured;
         }
 
         $configured = trim((string) config('lesson_generation.read_aloud.voice', ''));
@@ -104,16 +125,36 @@ class TtsConfigResolver
         ?string $style,
         string $outputFormat,
         array $extra = [],
+        ?string $provider = null,
     ): array {
         return array_merge([
             'feature' => $feature,
             'version' => $this->generationVersion(),
-            'provider' => 'azure_speech_rest',
+            'provider' => $this->metadataProviderName($provider),
             'locale' => $locale,
             'voice' => $voice,
             'rate' => $this->rate(),
             'style' => $style,
             'output_format' => $outputFormat,
         ], $extra);
+    }
+
+    protected function metadataProviderName(?string $provider): string
+    {
+        return match ($this->normalizeProvider($provider)) {
+            'elevenlabs' => 'elevenlabs_http',
+            default => 'azure_speech_rest',
+        };
+    }
+
+    protected function normalizeProvider(?string $provider): string
+    {
+        $provider = strtolower(trim((string) ($provider ?? 'azure')));
+
+        return match ($provider) {
+            '', 'azure', 'azure_speech' => 'azure',
+            'elevenlabs' => 'elevenlabs',
+            default => $provider,
+        };
     }
 }

@@ -6,8 +6,9 @@ use App\Models\Lesson;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Audio\LessonAudioChunkMerger;
-use App\Services\AzureSpeech\AzureSpeechTtsTextService;
 use App\Services\Lessons\GenerateLessonReadAloud;
+use App\Services\Speech\Contracts\TextToSpeechInterface;
+use App\Services\Speech\TextToSpeechManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
@@ -35,12 +36,73 @@ class GenerateLessonReadAloudTest extends TestCase
 
         Storage::fake('public');
 
-        $tts = Mockery::mock(AzureSpeechTtsTextService::class);
-        $tts->shouldReceive('synthesizeSsml')
+        $provider = Mockery::mock(TextToSpeechInterface::class);
+        $provider->shouldReceive('synthesizeReadAloudText')
             ->twice()
             ->andReturn(
-                'chunk-audio-1',
-                'chunk-audio-2',
+                [
+                    'binary' => 'chunk-audio-1',
+                    'voice' => 'en-US-JennyNeural',
+                    'format' => 'wav',
+                    'locale' => 'en-US',
+                    'style' => 'chat',
+                    'provider' => 'azure',
+                    'output_format' => 'riff-24khz-16bit-mono-pcm',
+                    'sync_precision' => 'word',
+                    'alignment_provider' => 'elevenlabs_with_timestamps',
+                    'model_id' => 'eleven_multilingual_v2',
+                    'read_aloud_speed' => 0.75,
+                    'timestamp_mode' => 'elevenlabs_with_timestamps',
+                    'word_timestamps' => [
+                        ['text' => 'Emma', 'start' => 0.0, 'end' => 0.4, 'start_char' => 0, 'end_char' => 4, 'chunk_index' => 0],
+                        ['text' => 'looked', 'start' => 0.45, 'end' => 0.82, 'start_char' => 5, 'end_char' => 11, 'chunk_index' => 0],
+                    ],
+                    'alignments' => [
+                        [
+                            'index' => 0,
+                            'text' => 'Emma looked at her watch.',
+                            'spoken_text' => 'Emma looked at her watch.',
+                            'duration' => 1.2,
+                            'pause_ms' => 0,
+                            'alignment' => ['characters' => ['E']],
+                            'normalized_alignment' => ['characters' => ['E']],
+                            'word_timestamps' => [
+                                ['text' => 'Emma', 'start' => 0.0, 'end' => 0.4, 'start_char' => 0, 'end_char' => 4, 'chunk_index' => 0],
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'binary' => 'chunk-audio-2',
+                    'voice' => 'en-US-JennyNeural',
+                    'format' => 'wav',
+                    'locale' => 'en-US',
+                    'style' => 'chat',
+                    'provider' => 'azure',
+                    'output_format' => 'riff-24khz-16bit-mono-pcm',
+                    'sync_precision' => 'word',
+                    'alignment_provider' => 'elevenlabs_with_timestamps',
+                    'model_id' => 'eleven_multilingual_v2',
+                    'read_aloud_speed' => 0.75,
+                    'timestamp_mode' => 'elevenlabs_with_timestamps',
+                    'word_timestamps' => [
+                        ['text' => 'She', 'start' => 0.0, 'end' => 0.25, 'start_char' => 0, 'end_char' => 3, 'chunk_index' => 0],
+                    ],
+                    'alignments' => [
+                        [
+                            'index' => 0,
+                            'text' => 'She started walking faster because the train was about to leave.',
+                            'spoken_text' => 'She started walking faster because the train was about to leave.',
+                            'duration' => 1.0,
+                            'pause_ms' => 0,
+                            'alignment' => ['characters' => ['S']],
+                            'normalized_alignment' => ['characters' => ['S']],
+                            'word_timestamps' => [
+                                ['text' => 'She', 'start' => 0.0, 'end' => 0.25, 'start_char' => 0, 'end_char' => 3, 'chunk_index' => 0],
+                            ],
+                        ],
+                    ],
+                ],
             );
 
         $merger = Mockery::mock(LessonAudioChunkMerger::class);
@@ -53,7 +115,13 @@ class GenerateLessonReadAloudTest extends TestCase
             }), 'mp3')
             ->andReturn('merged-read-aloud');
 
-        $this->app->instance(AzureSpeechTtsTextService::class, $tts);
+        $ttsManager = Mockery::mock(TextToSpeechManager::class);
+        $ttsManager->shouldReceive('providerFor')
+            ->once()
+            ->with('lesson_read_aloud')
+            ->andReturn($provider);
+
+        $this->app->instance(TextToSpeechManager::class, $ttsManager);
         $this->app->instance(LessonAudioChunkMerger::class, $merger);
 
         $lesson = $this->createLesson([
@@ -70,6 +138,7 @@ class GenerateLessonReadAloudTest extends TestCase
         Storage::disk('public')->assertExists((string) $result->audio_path);
         $this->assertSame('ready', data_get($result->analysis_meta, 'read_aloud.status'));
         $this->assertSame('en-US-JennyNeural', data_get($result->analysis_meta, 'read_aloud.voice'));
+        $this->assertSame('azure', data_get($result->analysis_meta, 'read_aloud.provider'));
         $this->assertSame('en-US', data_get($result->analysis_meta, 'read_aloud.locale'));
         $this->assertSame('-4%', data_get($result->analysis_meta, 'read_aloud.rate'));
         $this->assertSame('chat', data_get($result->analysis_meta, 'read_aloud.style'));
@@ -77,6 +146,9 @@ class GenerateLessonReadAloudTest extends TestCase
         $this->assertSame('read-aloud-quality-v2', data_get($result->analysis_meta, 'read_aloud.generation_version'));
         $this->assertSame(0, data_get($result->analysis_meta, 'read_aloud.config_snapshot.chunk_break_ms'));
         $this->assertSame(520, data_get($result->analysis_meta, 'read_aloud.config_snapshot.paragraph_break_ms'));
+        $this->assertSame(0.75, data_get($result->analysis_meta, 'read_aloud.config_snapshot.speed'));
+        $this->assertSame('elevenlabs_with_timestamps', data_get($result->analysis_meta, 'read_aloud.config_snapshot.timestamp_mode'));
+        $this->assertNotNull(data_get($result->analysis_meta, 'read_aloud.cache_signature'));
         $this->assertSame('value', data_get($result->analysis_meta, 'existing'));
         $this->assertGreaterThanOrEqual(2, (int) data_get($result->analysis_meta, 'read_aloud.chunk_count'));
         $this->assertSame(
@@ -85,9 +157,12 @@ class GenerateLessonReadAloudTest extends TestCase
         );
         $this->assertSame('chunk', data_get($result->analysis_meta, 'read_aloud.chunks.0.type'));
         $this->assertFalse(data_get($result->analysis_meta, 'read_aloud.chunks.0.ends_paragraph'));
-        $this->assertNull(data_get($result->analysis_meta, 'read_aloud.sync_precision'));
-        $this->assertNull(data_get($result->analysis_meta, 'read_aloud.alignment_provider'));
-        $this->assertNull(data_get($result->analysis_meta, 'read_aloud.word_timestamps'));
+        $this->assertSame('word', data_get($result->analysis_meta, 'read_aloud.sync_precision'));
+        $this->assertSame('elevenlabs_with_timestamps', data_get($result->analysis_meta, 'read_aloud.alignment_provider'));
+        $this->assertSame('Emma', data_get($result->analysis_meta, 'read_aloud.word_timestamps.0.text'));
+        $this->assertSame('She', data_get($result->analysis_meta, 'read_aloud.word_timestamps.2.text'));
+        $this->assertSame('Emma looked at her watch.', data_get($result->analysis_meta, 'read_aloud.chunks.0.spoken_text'));
+        $this->assertNotNull(data_get($result->analysis_meta, 'read_aloud.timings'));
     }
 
     public function test_it_does_not_overwrite_existing_successful_read_aloud_data_when_generation_fails(): void
@@ -95,15 +170,18 @@ class GenerateLessonReadAloudTest extends TestCase
         config()->set('lesson_generation.read_aloud.chunk.max_chars', 80);
         config()->set('lesson_generation.read_aloud.voice_map', []);
 
-        $tts = Mockery::mock(AzureSpeechTtsTextService::class);
-        $tts->shouldReceive('pickVoiceShortName')
-            ->once()
-            ->andReturn('en-US-JennyNeural');
-        $tts->shouldReceive('synthesizeSsml')
+        $provider = Mockery::mock(TextToSpeechInterface::class);
+        $provider->shouldReceive('synthesizeReadAloudText')
             ->once()
             ->andThrow(new RuntimeException('TTS failed'));
 
-        $this->app->instance(AzureSpeechTtsTextService::class, $tts);
+        $ttsManager = Mockery::mock(TextToSpeechManager::class);
+        $ttsManager->shouldReceive('providerFor')
+            ->once()
+            ->with('lesson_read_aloud')
+            ->andReturn($provider);
+
+        $this->app->instance(TextToSpeechManager::class, $ttsManager);
 
         $lesson = $this->createLesson([
             'analysis_meta' => [

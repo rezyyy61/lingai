@@ -25,8 +25,12 @@ class LessonAudioChunkMerger
                     continue;
                 }
 
-                $segmentPath = $workspace . '/segment-' . $index . '.wav';
-                file_put_contents($segmentPath, $binary);
+                $segmentPath = $this->normalizeChunkToWav(
+                    binary: $binary,
+                    workspace: $workspace,
+                    index: $index,
+                    inputFormat: (string) ($chunk['input_format'] ?? 'wav'),
+                );
                 $inputPaths[] = $segmentPath;
 
                 $pauseMs = max(0, (int) ($chunk['pause_ms'] ?? 0));
@@ -144,6 +148,60 @@ class LessonAudioChunkMerger
         }
 
         @rmdir($workspace);
+    }
+
+    protected function normalizeChunkToWav(string $binary, string $workspace, int $index, string $inputFormat): string
+    {
+        $normalizedInputFormat = strtolower(trim($inputFormat));
+        $inputExtension = $this->inputExtension($normalizedInputFormat);
+        $inputPath = $workspace . '/segment-' . $index . '-input.' . $inputExtension;
+        $outputPath = $workspace . '/segment-' . $index . '.wav';
+
+        file_put_contents($inputPath, $binary);
+
+        if ($normalizedInputFormat === 'wav' || str_contains($normalizedInputFormat, 'riff')) {
+            $this->runCommand([
+                'ffmpeg',
+                '-y',
+                '-i',
+                $inputPath,
+                '-ac',
+                '1',
+                '-ar',
+                '24000',
+                '-c:a',
+                'pcm_s16le',
+                $outputPath,
+            ], 'ffmpeg wav normalization failed');
+
+            return $outputPath;
+        }
+
+        $this->runCommand([
+            'ffmpeg',
+            '-y',
+            '-i',
+            $inputPath,
+            '-ac',
+            '1',
+            '-ar',
+            '24000',
+            '-c:a',
+            'pcm_s16le',
+            $outputPath,
+        ], 'ffmpeg input normalization failed');
+
+        return $outputPath;
+    }
+
+    protected function inputExtension(string $format): string
+    {
+        return match (true) {
+            str_contains($format, 'riff'), str_contains($format, 'wav') => 'wav',
+            str_contains($format, 'ogg') => 'ogg',
+            str_contains($format, 'mpeg'), str_contains($format, 'mp3') => 'mp3',
+            default => 'bin',
+        };
     }
 
     protected function runCommand(array $parts, string $errorPrefix): void

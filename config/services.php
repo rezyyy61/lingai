@@ -97,6 +97,42 @@ return [
         'endpoint' => env('AZURE_SPEECH_ENDPOINT'),
     ],
 
+    'tts' => [
+        'provider' => env('TTS_PROVIDER', 'azure'),
+        'fallback_provider' => env('TTS_FALLBACK_PROVIDER', 'azure'),
+        'elevenlabs' => [
+            'base_url' => env('ELEVENLABS_BASE_URL', 'https://api.elevenlabs.io'),
+            'api_key' => env('ELEVENLABS_API_KEY'),
+            'voice_id' => env('ELEVENLABS_VOICE_ID'),
+            'model_id' => env('ELEVENLABS_MODEL_ID'),
+            'output_format' => env('ELEVENLABS_OUTPUT_FORMAT', 'mp3_44100_128'),
+            'timeout' => env('ELEVENLABS_TIMEOUT', 45),
+            'connect_timeout' => env('ELEVENLABS_CONNECT_TIMEOUT', 10),
+            'read_aloud' => [
+                'model_id' => env('ELEVENLABS_READ_ALOUD_MODEL_ID', env('ELEVENLABS_MODEL_ID')),
+                'output_format' => env('ELEVENLABS_READ_ALOUD_OUTPUT_FORMAT', env('ELEVENLABS_OUTPUT_FORMAT', 'mp3_44100_128')),
+                'max_chars' => (int) env('ELEVENLABS_READ_ALOUD_MAX_CHARS', 520),
+                'voice_settings' => [
+                    'stability' => (float) env('ELEVENLABS_READ_ALOUD_STABILITY', 0.72),
+                    'similarity_boost' => (float) env('ELEVENLABS_READ_ALOUD_SIMILARITY_BOOST', 0.70),
+                    'style' => (float) env('ELEVENLABS_READ_ALOUD_STYLE', 0.0),
+                    'use_speaker_boost' => (bool) env('ELEVENLABS_READ_ALOUD_SPEAKER_BOOST', true),
+                    'speed' => (float) env('ELEVENLABS_READ_ALOUD_SPEED', 0.75),
+                ],
+            ],
+            'lesson_audio' => [
+                'model_id' => env('ELEVENLABS_LESSON_AUDIO_MODEL_ID', env('ELEVENLABS_MODEL_ID')),
+                'output_format' => env('ELEVENLABS_LESSON_AUDIO_OUTPUT_FORMAT', env('ELEVENLABS_OUTPUT_FORMAT', 'mp3_44100_128')),
+                'voice_settings' => [
+                    'stability' => (float) env('ELEVENLABS_LESSON_AUDIO_STABILITY', 0.62),
+                    'similarity_boost' => (float) env('ELEVENLABS_LESSON_AUDIO_SIMILARITY_BOOST', 0.78),
+                    'style' => (float) env('ELEVENLABS_LESSON_AUDIO_STYLE', 0.08),
+                    'use_speaker_boost' => (bool) env('ELEVENLABS_LESSON_AUDIO_SPEAKER_BOOST', true),
+                ],
+            ],
+        ],
+    ],
+
 
     'youtube_transcript' => [
         'yt_dlp_bin' => env('YT_DLP_BIN', '/opt/yt/bin/yt-dlp'),

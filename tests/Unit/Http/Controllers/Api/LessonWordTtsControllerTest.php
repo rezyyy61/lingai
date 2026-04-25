@@ -5,7 +5,8 @@ namespace Tests\Unit\Http\Controllers\Api;
 use App\Http\Controllers\Api\LessonWordTtsController;
 use App\Models\Lesson;
 use App\Models\LessonWord;
-use App\Services\AzureSpeech\AzureSpeechTtsService;
+use App\Services\Speech\Contracts\TextToSpeechInterface;
+use App\Services\Speech\TextToSpeechManager;
 use App\Services\Speech\TtsConfigResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -48,8 +49,8 @@ class LessonWordTtsControllerTest extends TestCase
             }))
             ->andReturn(true);
 
-        $tts = Mockery::mock(AzureSpeechTtsService::class);
-        $tts->shouldReceive('synthesizeShadowingDetailed')
+        $provider = Mockery::mock(TextToSpeechInterface::class);
+        $provider->shouldReceive('synthesizeShadowingDetailed')
             ->once()
             ->with('suggested', 'en', null, 'slow', null, 'practice_flashcard')
             ->andReturn([
@@ -85,9 +86,15 @@ class LessonWordTtsControllerTest extends TestCase
                 ],
             ]);
 
+        $ttsManager = Mockery::mock(TextToSpeechManager::class);
+        $ttsManager->shouldReceive('providerFor')
+            ->once()
+            ->with('practice_flashcard')
+            ->andReturn($provider);
+
         $request = Request::create('/api/lesson-words/1/tts', 'GET');
 
-        $response = app(LessonWordTtsController::class)->show($request, $word, $tts, app(TtsConfigResolver::class));
+        $response = app(LessonWordTtsController::class)->show($request, $word, $ttsManager, app(TtsConfigResolver::class));
 
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame(Storage::disk('public')->url('lesson_tts/new-word.mp3'), $response->getData(true)['audio_url']);

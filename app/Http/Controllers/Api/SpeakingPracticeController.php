@@ -6,12 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Services\Ai\LlmClient;
 use App\Services\Audio\AudioConvertService;
 use App\Services\AzureSpeech\AzureSpeechSttService;
-use App\Services\AzureSpeech\AzureSpeechTtsService;
+use App\Services\Speech\TextToSpeechManager;
 use Illuminate\Http\Request;
 
 class SpeakingPracticeController extends Controller
 {
-    public function submit(Request $request, AzureSpeechSttService $stt, AzureSpeechTtsService $tts, AudioConvertService $conv, LlmClient $llm)
+    public function submit(Request $request, AzureSpeechSttService $stt, TextToSpeechManager $ttsManager, AudioConvertService $conv, LlmClient $llm)
     {
         $request->validate([
             'audio' => ['required', 'file'],
@@ -43,7 +43,9 @@ class SpeakingPracticeController extends Controller
         $feedback = $this->getSpeakingFeedback($llm, $spoken, $target, $prompt);
 
         $ttsText = (string) ($feedback['corrected'] ?? $spoken);
-        $audioUrl = $tts->synthesizeShadowing($ttsText, $target, null, 'slow');
+        $audioUrl = $ttsManager
+            ->providerFor('speaking_practice')
+            ->synthesizeShadowing($ttsText, $target, null, 'slow', null, 'speaking_practice');
 
         return response()->json([
             'spoken' => $spoken,

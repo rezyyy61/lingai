@@ -37,4 +37,25 @@ class TtsConfigResolverTest extends TestCase
         $this->assertSame('-8%', $snapshot['rate']);
         $this->assertSame('beginner', $snapshot['preset']);
     }
+
+    public function test_it_uses_elevenlabs_voice_and_metadata_when_provider_is_selected(): void
+    {
+        config()->set('services.tts.provider', 'elevenlabs');
+        config()->set('services.tts.elevenlabs.voice_id', 'voice-eleven');
+
+        $resolver = app(TtsConfigResolver::class);
+
+        $this->assertSame('voice-eleven', $resolver->voiceForLocaleUsingProvider('en-US', null, null, 'elevenlabs'));
+
+        $snapshot = $resolver->configSnapshot(
+            feature: 'practice_shadowing',
+            locale: 'en-US',
+            voice: 'voice-eleven',
+            style: null,
+            outputFormat: 'mp3_44100_128',
+            provider: 'elevenlabs',
+        );
+
+        $this->assertSame('elevenlabs_http', $snapshot['provider']);
+    }
 }

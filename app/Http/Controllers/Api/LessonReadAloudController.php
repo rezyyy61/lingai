@@ -22,9 +22,9 @@ class LessonReadAloudController extends Controller
         return response()->json($state->get($lesson));
     }
 
-    public function generate(GenerateLessonReadAloudRequest $request, Lesson $lesson)
+    public function generate(GenerateLessonReadAloudRequest $request, Lesson $lesson, LessonReadAloudState $state)
     {
-        return DB::transaction(function () use ($lesson) {
+        return DB::transaction(function () use ($lesson, $state) {
             /** @var Lesson $lockedLesson */
             $lockedLesson = Lesson::query()
                 ->whereKey($lesson->id)
@@ -32,8 +32,9 @@ class LessonReadAloudController extends Controller
                 ->firstOrFail();
 
             $meta = is_array($lockedLesson->analysis_meta) ? $lockedLesson->analysis_meta : [];
+            $readAloud = is_array(data_get($meta, 'read_aloud')) ? data_get($meta, 'read_aloud') : [];
 
-            if ((string) data_get($meta, 'read_aloud.status', 'pending') === 'processing') {
+            if ((string) data_get($meta, 'read_aloud.status', 'pending') === 'processing' && ! $state->isProcessingStale($readAloud)) {
                 return response()->json([
                     'status' => 'processing',
                     'message' => 'Read-aloud generation is already in progress.',
@@ -43,6 +44,7 @@ class LessonReadAloudController extends Controller
             data_set($meta, 'read_aloud.status', 'processing');
             data_set($meta, 'read_aloud.started_at', now()->toIso8601String());
             data_set($meta, 'read_aloud.format', config('lesson_generation.read_aloud.format', 'mp3'));
+            data_forget($meta, 'read_aloud.failed_at');
 
             $lockedLesson->forceFill([
                 'analysis_meta' => $meta,

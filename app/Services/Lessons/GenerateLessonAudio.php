@@ -4,7 +4,7 @@ namespace App\Services\Lessons;
 
 use App\Models\Lesson;
 use App\Services\Audio\LessonAudioChunkMerger;
-use App\Services\AI\AzureLessonTtsClient;
+use App\Services\Speech\TextToSpeechManager;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -13,7 +13,7 @@ use RuntimeException;
 class GenerateLessonAudio
 {
     public function __construct(
-        protected AzureLessonTtsClient $ttsClient,
+        protected TextToSpeechManager $ttsManager,
         protected LessonAudioChunkMerger $chunkMerger,
         protected GenerateLessonAudioScript $generateLessonAudioScript,
     ) {}
@@ -40,19 +40,26 @@ class GenerateLessonAudio
         $voiceMap = [];
         $chunks = [];
 
+        $tts = $this->ttsManager->providerFor('lesson_audio');
+
         foreach ($spokenSegments as $segment) {
-            $audio = $this->ttsClient->synthesizeSegment(
+            $audio = $tts->synthesizeLessonSegment(
                 text: (string) $segment['text'],
                 languageCode: is_string($languageCode) ? $languageCode : null,
                 speaker: (string) $segment['speaker'],
                 style: (string) $segment['style'],
                 format: 'wav',
+                options: [
+                    'use_case' => 'lesson_audio',
+                    'pacing_intent' => 'clear_natural_practice',
+                ],
             );
 
             $voiceMap[(string) $segment['speaker']] = $audio['voice'];
             $chunks[] = [
                 'binary' => $audio['binary'],
                 'pause_ms' => (int) $segment['pause_ms'],
+                'input_format' => (string) ($audio['input_format'] ?? 'wav'),
             ];
             $lastAudio = $audio;
         }
@@ -79,6 +86,8 @@ class GenerateLessonAudio
             data_set($meta, 'audio_generation.status', 'ready');
             data_set($meta, 'audio_generation.voice', $primaryVoice);
             data_set($meta, 'audio_generation.voice_map', $voiceMap);
+            data_set($meta, 'audio_generation.provider', $lastAudio['provider']);
+            data_set($meta, 'audio_generation.mapping_note', $lastAudio['mapping_note'] ?? null);
             data_set($meta, 'audio_generation.format', $format);
             data_set($meta, 'audio_generation.generated_at', now()->toIso8601String());
             data_set($meta, 'audio_generation.locale', $lastAudio['locale']);

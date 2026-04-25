@@ -42,7 +42,17 @@ class GenerateLessonReadAloudJob implements ShouldQueue
             return;
         }
 
-        $generator->handle($lesson);
+        try {
+            $generator->handle($lesson);
+        } catch (Throwable $exception) {
+            Log::error('Lesson read-aloud generation failed', [
+                'lesson_id' => $this->lessonId,
+                'exception' => get_class($exception),
+                'message' => $exception->getMessage(),
+            ]);
+
+            $this->markLessonFailed();
+        }
     }
 
     public function failed(Throwable $exception): void
@@ -53,6 +63,11 @@ class GenerateLessonReadAloudJob implements ShouldQueue
             'message' => $exception->getMessage(),
         ]);
 
+        $this->markLessonFailed();
+    }
+
+    protected function markLessonFailed(): void
+    {
         $lesson = Lesson::query()->find($this->lessonId);
 
         if (! $lesson) {

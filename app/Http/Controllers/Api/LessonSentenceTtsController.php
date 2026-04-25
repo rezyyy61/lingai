@@ -4,14 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\LessonSentence;
-use App\Services\AzureSpeech\AzureSpeechTtsService;
+use App\Services\Speech\TextToSpeechManager;
 use App\Services\Speech\TtsConfigResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class LessonSentenceTtsController extends Controller
 {
-    public function show(Request $request, LessonSentence $sentence, AzureSpeechTtsService $tts, TtsConfigResolver $ttsConfig)
+    public function show(Request $request, LessonSentence $sentence, TextToSpeechManager $ttsManager, TtsConfigResolver $ttsConfig)
     {
         $preset = trim($request->string('preset')->toString());
         $cachedPreset = trim((string) data_get($sentence->meta, 'shadowing_tts.preset'));
@@ -39,7 +39,7 @@ class LessonSentenceTtsController extends Controller
         $language = optional($sentence->lesson)->target_language
             ?? config('learning_languages.default_target', 'en');
 
-        $result = $tts->synthesizeShadowingDetailed(
+        $result = $ttsManager->providerFor('practice_shadowing')->synthesizeShadowingDetailed(
             text: $text,
             languageCode: $language,
             voice: null,

@@ -13,6 +13,12 @@ const showReadAloud = ref(false)
 const isMobile = ref(false)
 const isReadExpanded = ref(false)
 const isAudioPlaying = ref(false)
+const readAloudActiveTokenIndex = ref<number | null>(null)
+const readAloudHighlightAvailable = ref(false)
+const readAloudTimings = ref<Array<{ text: string }>>([])
+const readAloudMappedBlocks = ref<Array<{
+  segments: Array<{ type: 'text'; text: string } | { type: 'token'; text: string; tokenIndex: number }>
+}>>([])
 
 let mq: MediaQueryList | null = null
 let onMqChange: ((e: MediaQueryListEvent) => void) | null = null
@@ -178,6 +184,73 @@ const formattedBlocks = computed(() => {
     })
 })
 
+const tokenizeDisplayBlock = (text: string) => {
+  const segments: Array<{ type: 'text'; text: string } | { type: 'token'; text: string }> = []
+  const regex = /(\s+|[^\p{L}\p{N}'’-]+|[\p{L}\p{N}'’-]+)/gu
+  const matches = text.match(regex) ?? []
+
+  matches.forEach((part) => {
+    if (/[\p{L}\p{N}]/u.test(part)) {
+      segments.push({ type: 'token', text: part })
+      return
+    }
+
+    segments.push({ type: 'text', text: part })
+  })
+
+  return segments
+}
+
+const rebuildHighlightMapping = (timedTokens: Array<{ text: string }>) => {
+  if (!timedTokens.length || hasDialogue.value || isTyping.value) {
+    readAloudMappedBlocks.value = []
+    readAloudHighlightAvailable.value = false
+    return
+  }
+
+  let tokenCursor = 0
+  const mappedBlocks = formattedBlocks.value.map((block) => {
+    const plain = block.plain ?? ''
+    const baseSegments = tokenizeDisplayBlock(plain)
+    const segments = baseSegments.map((segment) => {
+      if (segment.type !== 'token') {
+        return segment
+      }
+
+      const mapped = {
+        type: 'token' as const,
+        text: segment.text,
+        tokenIndex: tokenCursor,
+      }
+
+      tokenCursor += 1
+      return mapped
+    })
+
+    return { segments }
+  })
+
+  readAloudMappedBlocks.value = mappedBlocks
+  readAloudHighlightAvailable.value = tokenCursor >= timedTokens.length && tokenCursor > 0
+}
+
+const handleReadAloudSyncChange = (payload: {
+  activeTokenIndex: number | null
+  timings: Array<{ text: string }>
+  available: boolean
+}) => {
+  readAloudActiveTokenIndex.value = payload.activeTokenIndex
+  readAloudTimings.value = payload.timings
+
+  if (!payload.available) {
+    readAloudHighlightAvailable.value = false
+    readAloudMappedBlocks.value = []
+    return
+  }
+
+  rebuildHighlightMapping(payload.timings)
+}
+
 const resetTypingState = () => {
   abortTyping = true
   isTyping.value = false
@@ -244,6 +317,18 @@ watch(
     await runTypewriterOnce()
   },
   { immediate: true },
+)
+
+watch(
+  () => [formattedBlocks.value, hasDialogue.value, isTyping.value] as const,
+  () => {
+    if (!readAloudTimings.value.length) {
+      return
+    }
+
+    rebuildHighlightMapping(readAloudTimings.value)
+  },
+  { deep: true },
 )
 
 const copySourceText = computed(() => {
@@ -363,6 +448,7 @@ onBeforeUnmount(() => {
             :lesson-id="lesson.id"
             variant="sheet"
             @playing-change="isAudioPlaying = $event"
+            @sync-change="handleReadAloudSyncChange"
           />
         </div>
       </transition>
@@ -414,7 +500,26 @@ onBeforeUnmount(() => {
               </template>
 
               <template v-else>
-                <span class="whitespace-pre-wrap" v-html="block.html"></span>
+                <template v-if="readAloudHighlightAvailable && readAloudMappedBlocks[index]?.segments?.length">
+                  <span class="whitespace-pre-wrap">
+                    <template
+                      v-for="(segment, segmentIndex) in readAloudMappedBlocks[index]?.segments"
+                      :key="`${index}-${segmentIndex}`"
+                    >
+                      <span
+                        v-if="segment.type === 'token'"
+                        class="transition-[background-color,box-shadow] duration-150 [box-decoration-break:clone]"
+                        :class="segment.tokenIndex === readAloudActiveTokenIndex
+                          ? 'bg-amber-300/35 rounded-[3px] shadow-[0_0_0_1px_rgba(245,158,11,0.35)]'
+                          : ''"
+                      >
+                        {{ segment.text }}
+                      </span>
+                      <span v-else>{{ segment.text }}</span>
+                    </template>
+                  </span>
+                </template>
+                <span v-else class="whitespace-pre-wrap" v-html="block.html"></span>
               </template>
             </div>
           </template>
@@ -487,6 +592,7 @@ onBeforeUnmount(() => {
                 :lesson-id="lesson.id"
                 variant="sheet"
                 @playing-change="isAudioPlaying = $event"
+                @sync-change="handleReadAloudSyncChange"
               />
             </div>
           </div>
