@@ -35,7 +35,20 @@ class LessonController extends Controller
         }
 
         $lessons = $query
-            ->latest()
+            ->select([
+                'id',
+                'user_id',
+                'workspace_id',
+                'title',
+                'level',
+                'resource_type',
+                'status',
+                'short_description',
+                'created_at',
+                'updated_at',
+            ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->paginate(20);
 
         return response()->json($lessons);
